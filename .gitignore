@@ -1,0 +1,13 @@
+# PyDSTool folders
+
+/build/**
+/__pycache__/**
+/radau5_temp/**
+
+# Eldritch imagery folders
+
+/Pics/**
+
+# temporary files to save trajectories
+
+*.txt
