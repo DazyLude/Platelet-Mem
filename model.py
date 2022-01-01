@@ -2,51 +2,23 @@ import PyDSTool as dst
 import PyDSTool.utils as dstuti
 import numpy as np
 import math as m
+import random as rng
+import matplotlib as mpl
 from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from scipy import signal as snl
 import copy as copy
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
+import ast
 import gc
 
+import ModelParameters as IPA #initially named as InitialParametersArray
+
 #Now I was thinking about putting all the default concentration of ions, their points of interest etc in one place.
-#this class plays a huge role in "templatification" of the code
 #All of the parameters that I change EVER should be taken from here, just in case
 class InitIonMatrix():
 	def __init__(self, string=None):
 		if string == None:
-			self.getparam = [
-				[0.01, 0.08, 0.03, 2.3053355e-8, 0.4e-9, 0.3, 0.1],	#default concentrations, 0; cl ideal: 0.01213625
-				['Na','K','Cl','Ca_cyt', 'Ca_er', 'x100', 'x110'],	#names, 1
-				[1e-10, 1e-10, 0.0195, 1e-11],	#zone of interest: start, 2
-				[0.02, 0.2, 0.04, 1e-3],	#zone of interest: end, 3
-				[0.145, 0.005, 0.150, 3e-3],	#default solution, 4
-				[0.13, 0.02, 0.15, 2.35e-8],	#hypotonic solution 1, 5
-				[0.11, 0.04, 0.15, 5e-3],	#hypertonic solution 2, 6
-				[-0.055, -0.050, -0.080],	#em, default, lower, higher, 7
-				[0, 1000., 0.01],	#time: start, finish, dt 8 ------------------------------------------------------------------------------------------
-				[0.05, 2, 1, 0],	#default permeabilities 1/h 9
-				[0.5, 0., 0.004, 0.2, 20., 0.21, 1.64, 2., 0.185, 0.1, 4.6, 1.7, 1, 0.11, 6., 0.45, 0.145, 2.],	#Fedor constants, 10
-				[0.5, 10, 0.05, 1],	#IP3 max, type of function, parametres of function, 11 <-------------------------------- IP3 HERE ---------------
-				[22, 4.8e-15, 75e-12],	#other platelet constants: Cm, V, S, 12
-				[0.008, 3, 2],	#13 (atpase old) (left as a grim reminder of the cost of progress)
-				[0.01], #parametres of NKCC: J0; 14
-				[0.001, 1e-4, 10],	#parametres of NCX: JMax, c1, c2; 15
-				[96485, 8.314, 310, 3600],	#world constants: F, R, T, speed (unit to hours); 16
-				[],	# 17
-				[[2.5e11,1e5],[1e4,1e5],[172,1.72e4],[1.5e7,2e5],[2e6,30],[1.15e4,6e8]], #Constants for ATPase kinetic model, by each reaction, then forward / backward, 18
-				[2., -0.03, -0.008], #kv 1.3, 19
-				[], #, 20 deprecated
-				[4.99e-3, 0.06e-3, 4.95e-3], #ATP, ADP, P concentrations, 21
-				[0.00, -0.01, 0.01], #, NaV 22
-				[], #, 23 deprecated
-				[0, 0.2, 1.2, 0], #ca channels, total, Na relative, K relative 24
-				[2.4e-7*3600, 2e-7, 4], #PMCA constants: Jmax, K1/2, n; 25
-				[2.8, 0.2e-6, 5], #Kca31 constants: Pmax, K1/2, n; 26
-				[0, 1, 1], #Kca11 constants: Pmax, K1/2, n; 27
-				[0., 0.7 * 1e-6, 4], #TRPC6 channel state function; 28
-				[0.2, 0.2, 0, 1], #TRPC6 channel relative permeabilities in order: Na, K, Cl, Ca; 29
-				]
+			self.getparam = IPA.TheArray
 		else:
 			self.getparam = []
 		self.steps=m.floor(1/0.01)
@@ -55,8 +27,13 @@ class InitIonMatrix():
 class platelet_config:
 	def __init__(self,
 				iNa_in = None, iK_in = None, iCl_in = None, iCa_in = None,
-				iosc_on = True, iSolution = -1, iEm = 0, iimx = InitIonMatrix()
+				iosc_on = True, iSolution = -1, iEm = 0, iimx = InitIonMatrix(), 
+				stationary = False, output = ""
 				):
+		#the successor of the IMX
+		self.params = IPA.TheDictionary
+		#params that won't change, like, ever (R, F etc) are still located here
+		#also consider storing parametres of other models (fedya's or ATPase here too)
 		self.imx = iimx
 		imx = iimx
 		# print("used parsed parametres, if any, to configure a platelet")
@@ -75,9 +52,8 @@ class platelet_config:
 		else: self.K_in = iK_in
 		if iCl_in is None: self.Cl_in = imx.getparam[0][2]
 		else: self.Cl_in = iCl_in
-		self.Ca_in_cyt = imx.getparam[0][4]
-		self.Ca_in_er = imx.getparam[0][3]
-		self.Ca_in = self.Ca_in_cyt + self.Ca_in_er
+		self.Ca_cyt_in = 23e-9
+		self.Ca_er_in = 200.
 
 		#outside
 		self.Na_ex = imx.getparam[4][0]
@@ -94,10 +70,10 @@ class platelet_config:
 		self.q = imx.getparam[10]
 		#Electric and other "platelet" constants
 		self.Em_rest = imx.getparam[7][iEm]
-		self.Cm = imx.getparam[12][0]
 		self.Vol = imx.getparam[12][1]
 		self.Surf = imx.getparam[12][2]
 		self.VtoS = self.Vol / self.Surf
+		self.Cm = imx.getparam[12][0] / self.Vol
 		#NaK atplase constants
 		self.J0_atp = imx.getparam[13][0]
 		self.N = imx.getparam[13][1]
@@ -138,12 +114,20 @@ class platelet_config:
 		self.Cl_TRPC = imx.getparam[29][2]
 		self.Ca_TRPC = imx.getparam[29][3]
 
+		# self.K_NCX = self.params['NCX'][0]
+
+		self.dPhiInit = -0.0
+
 		#calculated parameteres
 		self.External_ions_concentration = self.K_ex + self.Na_ex + self.Cl_ex + self.Ca_ex
-		self.Metabolite_concentration = self.External_ions_concentration - self.K_in - self.Na_in - self.Cl_in + 2 * self.Ca_in_cyt
-		self.Metabolite_charge = (self.K_in + self.Na_in + 2*self.Ca_in_cyt - self.Cl_in - self.Em_rest / self.F * self.Cm) / self.Metabolite_concentration
+		self.Metabolite_concentration = self.External_ions_concentration - self.K_in - self.Na_in - self.Cl_in + 2 * self.Ca_cyt_in
+		self.Metabolite_charge = (self.K_in + self.Na_in + 2*self.Ca_cyt_in - self.Cl_in - self.Em_rest / self.F * self.Cm) / self.Metabolite_concentration
 
 		self.AtpaseRate = self.Rest_UATP()
+
+		if (stationary == True): self.MakeStationary()
+		if (output == 'Full'): self.Get_Info()
+
 	#easy access to the calculated parameteres
 	def L(self):
 		return self.External_ions_concentration
@@ -153,7 +137,7 @@ class platelet_config:
 		return self.Metabolite_charge
 
 	def TestEm(self):
-		return self.F / self.Cm * (self.K_in + self.Na_in - self.Cl_in - self.Z0() * self.W0())
+		return self.F / self.Cm * (self.K_in + self.Na_in + 2*self.Ca_cyt_in - self.Cl_in - self.Z0() * self.W0())
 	def Give_Em(self, Na, K, Cl, Ca):
 		return self.F / self.Cm * (K + Na + 2*Ca - Cl - self.Z0() * self.W0())
 
@@ -179,7 +163,7 @@ class platelet_config:
 	#	na: self.J(in_ion=self.Na_in, ex_ion=self.Na_ex)
 	#	k:  self.J(in_ion=self.K_in, ex_ion=self.K_ex)
 	#	cl: self.J(z = -1, in_ion=self.Cl_in, ex_ion=self.Cl_ex)
-	#	ca: self.J(z = 2, in_ion=self.Ca_in, ex_ion=self.Ca_ex)
+	#	ca: self.J(z = 2, in_ion=self.Ca_cyt_in, ex_ion=self.Ca_ex)
 
 	def J_calc(self, intr, extr, em, z=1):
 		phi = z * em * self.F / self.R / self.T / 2
@@ -197,6 +181,15 @@ class platelet_config:
 	def Rest_UKNa2Cl(self):
 		#returns "osmotic pressure" on channels
 		return self.K_ex*self.Na_ex*pow(self.Cl_ex,2) - self.K_in*self.Na_in*pow(self.Cl_in,2)
+
+	def Rest_JPMCA(self):
+		return self.J_PMCA * pow(self.Ca_cyt_in, self.n_PMCA)/(pow(self.K05_PMCA, self.n_PMCA) + pow(self.Ca_cyt_in, self.n_PMCA))
+
+	def Rest_PKca31(self):
+		return self.P_Kca31 * pow(self.Ca_cyt_in, self.n_Kca31)/(pow(self.K05_Kca31, self.n_Kca31) + pow(self.Ca_cyt_in, self.n_Kca31))
+
+	def Rest_PKca11(self):
+		return self.P_Kca11 * pow(self.Ca_cyt_in, self.n_Kca11)/(pow(self.K05_Kca11, self.n_Kca11) + pow(self.Ca_cyt_in, self.n_Kca11))
 
 	def Rest_UATP(self):
 		F = self.F
@@ -227,21 +220,20 @@ class platelet_config:
 			+ b6 * pow(K, 2)*(b1 + f2)*b2 * ADP*f3 * m.exp(F * Em/(2 * R * T)) \
 			+ b6 * pow(K, 2)*(b1 + f2)*b2 * ADP*(b3 * pow(Na_exf, 3) * m.exp(-1 * F * Em/(2 * R * T)) + f4 * pow(K_exf, 2)))
 
-	def Rest_JPMCA(self):
-		return self.J_PMCA * pow(self.Ca_in_cyt, self.n_PMCA)/(pow(self.K05_PMCA, self.n_PMCA) + pow(self.Ca_in_cyt, self.n_PMCA))
+	def Rest_NCX_Na(self):
+		return self.params['NCXM']['Speed_Mod'] * (self.params['NCXM_init']['Cin_Na'] * self.params['NCXM']['x'] - self.params['NCXM']['e'] * self.params['NCXM_init']['Cin_E'] * pow(self.Na_in * 1e3, 3))
 
-	def Rest_PKca31(self):
-		return self.P_Kca31 * pow(self.Ca_in, self.n_Kca31)/(pow(self.K05_Kca31, self.n_Kca31) + pow(self.Ca_in, self.n_Kca31))
+	def Rest_NCX_Ca(self):
+		return self.params['NCXM']['Speed_Mod'] * (self.params['NCXM_init']['Cin_Ca'] * self.params['NCXM']['y'] - self.params['NCXM']['f'] * self.params['NCXM_init']['Cin_E'] * self.Ca_cyt_in * 1e3)
 
-	def Rest_PKca11(self):
-		return self.P_Kca11 * pow(self.Ca_in, self.n_Kca11)/(pow(self.K05_Kca11, self.n_Kca11) + pow(self.Ca_in, self.n_Kca11))
 
-	def Calc_permeabilities_from_channels(self):
+	def MakeStationary(self):
 		#sets P depending on concentrations and flow
-		self.P_Na = (self.N * self.J0_atp - self.U0_NaK2Cl * self.Rest_UKNa2Cl()) / self.J(z = 1., in_ion=self.Na_in, ex_ion=self.Na_ex)
-		self.P_K = (-self.K * self.J0_atp - self.U0_NaK2Cl * self.Rest_UKNa2Cl()) / self.J(z = 1., in_ion=self.K_in, ex_ion=self.K_ex) - self.Pkv13rest() - self.Rest_PKca31() - self.Rest_PKca11()
+		self.P_Na = (self.N * self.J0_atp - self.U0_NaK2Cl * self.Rest_UKNa2Cl() + 3*self.Rest_NCX_Na()) / self.J(z = 1., in_ion=self.Na_in, ex_ion=self.Na_ex)
+		self.P_K = (-self.K * self.J0_atp - self.U0_NaK2Cl * self.Rest_UKNa2Cl()) / self.J(z = 1., in_ion=self.K_in, ex_ion=self.K_ex) - self.Pkv13rest() - self.Rest_PKca31()
 		self.P_Cl = (-self.U0_NaK2Cl * 2. * self.Rest_UKNa2Cl()) / self.J(z = -1., in_ion=self.Cl_in, ex_ion=self.Cl_ex)
-		self.P_Ca = (self.Rest_JPMCA()) / self.J(z = 2., in_ion=self.Ca_in_cyt, ex_ion=self.Ca_ex)
+		self.P_Ca = (self.Rest_JPMCA()+self.Rest_NCX_Ca()) / self.J(z = 2., in_ion=self.Ca_cyt_in, ex_ion=self.Ca_ex)
+		# self.P_Ca = 1e-18
 
 	def Get_Info(self):
 		#prints everything out
@@ -251,66 +243,73 @@ class platelet_config:
 		print('Forces: Na ' + str(self.J(in_ion=self.Na_in, ex_ion=self.Na_ex))
 				+ ', K ' + str(self.J(in_ion=self.K_in, ex_ion=self.K_ex))
 				+ ', Cl ' + str(self.J(z = -1, in_ion=self.Cl_in, ex_ion=self.Cl_ex))
-				+ ', Ca ' + str(self.J(z = 2, in_ion=self.Ca_in, ex_ion=self.Ca_ex)))
-		print('Permeabilities: Na ' + str(self.P_Na * self.VtoS / 3.6 * 1e-4) + ', K ' + str(self.P_K * self.VtoS / 3.6 * 1e-4)
-				+ ', Cl ' + str(self.P_Cl * self.VtoS / 3.6 * 1e-4) + ', Ca ' + str(self.P_Ca * self.VtoS / 3.6 * 1e-4))
+				+ ', Ca ' + str(self.J(z = 2, in_ion=self.Ca_cyt_in, ex_ion=self.Ca_ex)))
+		#print('Permeabilities: Na ' + str(self.P_Na * self.VtoS / 3.6 * 1e-4) + ', K ' + str(self.P_K * self.VtoS / 3.6 * 1e-4)
+		#		+ ', Cl ' + str(self.P_Cl * self.VtoS / 3.6 * 1e-4) + ', Ca ' + str(self.P_Ca * self.VtoS / 3.6 * 1e-4))
 		print('Permeabilities (1/h): Na ' + str(self.P_Na) + ', K ' + str(self.P_K)	+ ', Cl ' + str(self.P_Cl) + ', Ca ' + str(self.P_Ca))
+		print('Permeabilities (total/h): Na ' + str(self.P_Na) + ', K ' + str(self.P_K + self.Pkv13rest() + self.Rest_PKca31())	+ ', Cl ' + str(self.P_Cl) + ', Ca ' + str(self.P_Ca))
 		print('NaK2Cl osmotic force ' + str(self.Rest_UKNa2Cl()))
+		print('ATPase rest activity mod' + str(self.Rest_UATP()))
 		#print('NaCa osmotic force ' + str(self.Rest_UNaCa()))
 
 class DST_interface:
 	def __init__(self, iPlat):
+		VoltClamp = False
 		self.imx = iPlat.imx
-		T = self.imx.getparam[16][3] #constant defining conversion rate of permeabilities: in imx they are 1/h, here they are 1/s by default
+		T = 3600 #constant defining conversion rate of permeabilities: in imx they are 1/h, here they are 1/s by default
 		self.plat = copy.copy(iPlat)
-		#ions
-		self.Na_Flux = '-3 * U_atp(t, Na, K, Cl, Ca_cyt) + (P_Na + P_TRPC(t) * TRPC_Na + PNv15i / (1 + exp((Em(Na, K, Cl, Ca_cyt, t) - PNv15h) / PNv15s))) * J(1, Na, Na_exf(t), Na, K, Cl, Ca_cyt, t) + U_NaK2Cl(Na, K, Cl, t)'
-		self.K_Flux = '2 * U_atp(t, Na, K, Cl, Ca_cyt) + (Kca11(Ca_er+Ca_cyt) + Kca31(Ca_er+Ca_cyt) + P_TRPC(t) * TRPC_K + P_K + PKv13i / (1 + exp((Em(Na, K, Cl, Ca_cyt, t) - PKv13h) / PKv13s))) * J(1, K, K_exf(t), Na, K, Cl, Ca_cyt, t) + U_NaK2Cl(Na, K, Cl, t)'
-		self.Cl_Flux = '(P_Cl + P_Ca_c * P_Cl_Ca) * J(-1, Cl, Cl_exf(t), Na, K, Cl, Ca_cyt, t) + 2. * U_NaK2Cl(Na, K, Cl, t)' 
-		self.Ca_cyt_flux = '(P_Ca + P_TRPC(t) * TRPC_Ca) * J(2., (Ca_cyt+Ca_er), Ca_exf(t), Na, K, Cl, Ca_cyt, t) - J_PMCA(Ca_cyt+Ca_er)'
-		self.Ca_er_flux = '(1/q13*((q14-(q9*q15*((Ca_er+Ca_cyt)*1e6-(q8-(Ca_cyt+Ca_er)*1e6)/(q9))*x110**q11))**q12 - \
-		q16*((Ca_er+Ca_cyt)*1e6)**2/(((Ca_er+Ca_cyt)*1e6)**2+q10**2))/(1+(q17*q18)/((q17 + (Ca_er+Ca_cyt)*1e6)**2)))'
-				# 'q4': self.plat.q[3],	#a2
-				# 'q5': self.plat.q[4],	#a5
-				# 'q6': self.plat.q[5],	#b2
-				# 'q7': self.plat.q[6],	#b5
-				# 'q8': self.plat.q[7],	#c0
-				# 'q9': self.plat.q[8],	#c1
-				# 'q10': self.plat.q[9],	#k3
-				# 'q11': self.plat.q[10],	#A
-				# 'q12': self.plat.q[11],	#B
-				# 'q13': self.plat.q[12],	#T
-				# 'q14': self.plat.q[13],	#nu0
-				# 'q15': self.plat.q[14],	#nu1
-				# 'q16': self.plat.q[15],	#nu3
-				# 'q17': self.plat.q[16],	#kBuff
-				# 'q18': self.plat.q[17],	#Buff
-		#ip3r
-		self.x100_rate = '-q4*(Ca_er+Ca_cyt)*1e6*x100 - q5*(Ca_er+Ca_cyt)*1e6*x100 + q7*x110'
-		self.x110_rate = '-q4*(Ca_er+Ca_cyt)*1e6*x110 + q5*(Ca_er+Ca_cyt)*1e6*x100 + q6/4*IP3f(t) - q7*x110'
+		#ions		
+		self.Ca_cyt_Flux = '((P_Ca + P_TRPC(t) * TRPC_Ca) * J(2., (Ca*1e-6), Ca_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) - J_PMCA(Ca*1e-6) - J_NCX_Ca(Ca, NCXM_Cin_Ca, NCXM_Cin_E))'
+		self.Ca_er_Flux = '-20*((fv0*(CaE-Ca)-fv1*(Ca-CaE)*x110**fA)**fB-fv3*Ca**2/(Ca**2+fk3**2)-fv4*Ca**2/(Ca**2+fk4**2))'
 
+		self.Na_Flux = '-3 * U_atp(t, Na, K, Cl, Ca_cyt, dPhi) + (P_Na + P_TRPC(t) * TRPC_Na) * J(1, Na, Na_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) + U_NaK2Cl(Na, K, Cl, t) - 3 * J_NCX_Na(Na, NCXM_Cin_Na, NCXM_Cin_E)'
+		self.K_Flux = '2 * U_atp(t, Na, K, Cl, Ca_cyt, dPhi) + (Kca31(Ca*1e-6) + P_TRPC(t) * TRPC_K + P_K + PKv13i / (1 + exp((Em(Na, K, Cl, Ca_cyt, t, dPhi) - PKv13h) / PKv13s))) * J(1, K, K_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) + U_NaK2Cl(Na, K, Cl, t)'
+		self.Cl_Flux = '(P_Cl + P_Ca_c * P_Cl_Ca) * J(-1, Cl, Cl_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) + 2. * U_NaK2Cl(Na, K, Cl, t)' 
+		self.Ca_Flux = '(((fv0*(CaE-Ca)-fv1*(Ca-CaE)*x110**fA)**fB-fv3*Ca**2/(Ca**2+fk3**2)-fv4*Ca**2/(Ca**2+fk4**2) +' + self.Ca_cyt_Flux + '*1e6' + ')/ftu)/(1+(fkBuff*fBuff)/((fkBuff + Ca)**2) + (fkBuff2*fBuff2)/((fkBuff2 + Ca)**2))'
+
+		self.x100_rate = '-fa2*Ca*x100-fa5*Ca*x100+fb5*x110'
+		self.x110_rate = '-fa2*Ca*x110+fa5*Ca*x100-fb5*x110+0.25*fb2*(IP3f(t))'
+		self.Ip3Ch = '0'
+
+		self.PipetteCurrent = '0*F*Vol*(' + '0*U_atp(t, Na, K, Cl, Ca_cyt, dPhi)+' + \
+			'+ (P_Na * 0.01) * JPip(1, Na, Na_exf(t), Na, K, Cl, Ca_cyt, t, dPhi)' + \
+			'+ (HypoChN * HypoChP + P_K * 0.01) * JPip(1, K, K_exf(t), Na, K, Cl, Ca_cyt, t, dPhi)' + \
+			'- (P_Cl* 0.01) * JPip(-1, Cl, Cl_exf(t), Na, K, Cl, Ca_cyt, t, dPhi)' + \
+			'+ 2. * ((P_Ca* 0.01) * JPip(2., (Ca*1e-6), Ca_exf(t), Na, K, Cl, Ca_cyt, t, dPhi))' + \
+			')'
+		self.PipettePotential = '0*(' + self.PipetteCurrent + ')/Vol'
+		
+		self.NCX_Model = {
+			'NCXM_Cin_E': '- NCXM_Cin_E * (NCXM_e * pow(Na * 1000, 3) + NCXM_f * Ca / 1000) + NCXM_x * NCXM_Cin_Na + NCXM_y * NCXM_Cin_Ca',
+			#'NCXM_Cout_E': '- NCXM_Cout_E * (NCXM_c * pow(Na_exf(t) * 1000, 3) + NCXM_d * Ca_exf(t) * 1000) + NCXM_b * NCXM_Cout_Na + NCXM_a * NCXM_Cout_Ca',
+			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g * NCXM_Cout_Na',
+			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h * NCXM_Cin_Na',
+			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j * NCXM_Cout_Ca',
+			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_Cin_Ca',
+		}
+		
 
 		#atpase
-		self.v1 = 'E_ATP * pow(Na,3) * f1 - Na_E_ATP * b1' 
-		self.v2 = 'Na_E_ATP * f2 - ADP * Na_E_P * b2'
-		self.v3 = 'Na_E_P * f3 * exp(F * Em(Na, K, Cl, Ca, t) /(2 * R * T)) - E_P * pow(Na_exf(t), 3) * b3 * exp(-1 * F * Em(Na, K, Cl, Ca, t) /(2 * R * T))'
-		self.v4 = 'E_P * pow(K_exf(t), 2) * f4 - P * K_E * b4'
-		self.v5 = 'K_E * ATP * f5 - K_E_ATP * b5'
-		self.v6 = 'K_E_ATP * f6 - E_ATP * pow(K, 2) * b6'
+		v1 = 'E_ATP * pow(Na,3) * f1 - Na_E_ATP * b1' 
+		v2 = 'Na_E_ATP * f2 - ADP * Na_E_P * b2'	
+		v3 = 'Na_E_P * f3 * exp(F * Em(Na, K, Cl, Ca_cyt, t, dPhi) /(2 * R * T)) - E_P * pow(Na_exf(t), 3) * b3 * exp(-1 * F * Em(Na, K, Cl, Ca_cyt, t, dPhi) / (2 * R * T))'
+		v4 = 'E_P * pow(K_exf(t), 2) * f4 - P * K_E * b4'
+		v5 = 'K_E * ATP * f5 - K_E_ATP * b5'
+		v6 = 'K_E_ATP * f6 - E_ATP * pow(K, 2) * b6'
 
 		self.k1 = 'f6'
 		self.k2 = 'f1 * pow(Na, 3)'
 		self.k3 = 'f2'
-		self.k4 = 'f3 * exp(F * Em(Na, K, Cl, Ca, t)/(2 * R * T))'
+		self.k4 = 'f3 * exp(F * Em(Na, K, Cl, Ca_cyt, t, dPhi)/(2 * R * T))'
 		
 		self.a1 = 'b6 * pow(K, 2)'
 		self.a2 = '(b1 + f2)'
 		self.a3 = 'b2 * ADP'
-		self.a4 = '(b3 * pow(Na_exf(t), 3) * exp(-1 * F * Em(Na, K, Cl, Ca, t)/(2 * R * T)) + f4 * pow(K_exf(t), 2))'
+		self.a4 = '(b3 * pow(Na_exf(t), 3) * exp(-1 * F * Em(Na, K, Cl, Ca_cyt, t, dPhi)/(2 * R * T)) + f4 * pow(K_exf(t), 2))'
 
-		self.bracket = self.k1 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '+'\
-		 + self.a1 + '*' + self.a2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.a3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.a3 + '*' + self.a4
+		self.bracket = self.k1 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.a3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.a3 + '*' + self.a4
 		#initializing PyDSTool object with given parametres of a platelet class
+
 		self.pts = None
 		self.DSargs = dst.args(name = 'volume_model')
 		self.DSargs.pars = { 
@@ -339,10 +338,16 @@ class DST_interface:
 						'Na_ex_r': self.plat.Na_ex, #concentrations at rest outside (initial outside concentrations, otherwise to stiff)
 						'K_ex_r': self.plat.K_ex,
 						'Cl_ex_r': self.plat.Cl_ex,
+						#Concentrations in the basin solution
 						'Na_ex': self.plat.Sol_Na_ex, #concentrations outside for integrating
 						'K_ex': self.plat.Sol_K_ex,
 						'Cl_ex': self.plat.Sol_Cl_ex,
 						'Ca_ex': self.plat.Sol_Ca_ex,
+						#Concentrations in the pipette solution
+						'NaPip_ex': 0.,
+						'KPip_ex': 0.,
+						'ClPip_ex': 0.,
+						'CaPip_ex': 0.,
 
 						'VMax_PMCA': self.plat.J_PMCA / T,
 						'K05_PMCA': self.plat.K05_PMCA,
@@ -363,29 +368,35 @@ class DST_interface:
 						'TRPC_K': self.plat.K_TRPC,
 						'TRPC_Ca': self.plat.Ca_TRPC,
 						'TRPC_Cl': self.plat.Cl_TRPC,
-						't_DAG_on': 10,
+						't_DAG_on': 10.,
 
-						'q4': self.plat.q[3],	#a2
-						'q5': self.plat.q[4],	#a5
-						'q6': self.plat.q[5],	#b2
-						'q7': self.plat.q[6],	#b5
-						'q8': self.plat.q[7],	#c0
-						'q9': self.plat.q[8],	#c1
-						'q10': self.plat.q[9],	#k3
-						'q11': self.plat.q[10],	#A
-						'q12': self.plat.q[11],	#B
-						'q13': self.plat.q[12],	#T
-						'q14': self.plat.q[13],	#nu0
-						'q15': self.plat.q[14],	#nu1
-						'q16': self.plat.q[15],	#nu3
-						'q17': self.plat.q[16],	#kBuff
-						'q18': self.plat.q[17],	#Buff
+						# 'k_NCX': self.plat.K_NCX / T,
+
+						'fa2': 0.6,
+		                'fa5': 400.,
+		                'fb2': 0.6*1., #
+		                'fb5': 400.*0.08234, #
+		                'fv0': 0.001,
+		                'fv1': 0.5, #
+		                'fv3': 10.,
+		                'fv4': 27.,
+		                'ftu': 1.,
+		                'fk3': 0.26,
+		                'fk4': 1.1,
+		                'fA': 4.,
+		                'fB': 1.5,
+		                'fc0': 2., #
+		                'fc1': 0.05,
+		                'fkBuff': 1.,
+		                'fBuff':10.,
+		                'fkBuff2': 1.,
+		                'fBuff2':2.,
+
 						'ip30': self.plat.IP3[0],
 						'ip31': self.plat.IP3[1],
 						'ip32': self.plat.IP3[2],
 						'ip33': self.plat.IP3[3],
-						'J_er_leak': 0., 
-						'IP3max': self.plat.IP3max,
+						'IP3max': self.plat.params['ip3'][0],
 
 						'ATP': self.imx.getparam[21][0],
 						'ADP': self.imx.getparam[21][1],
@@ -408,23 +419,44 @@ class DST_interface:
 						'PKv13i': self.imx.getparam[19][0] / T,
 						'PKv13h': self.imx.getparam[19][1],
 						'PKv13s': self.imx.getparam[19][2],
+						'PKv13iPip': self.imx.getparam[19][0] / T / 20.,
 
 						'PNv15i': self.imx.getparam[22][0] / T,
 						'PNv15h': self.imx.getparam[22][1],
 						'PNv15s': self.imx.getparam[22][2],
 
+						'NCXM_e': self.plat.params['NCXM']['e'],
+						'NCXM_f': self.plat.params['NCXM']['f'],
+						'NCXM_x': self.plat.params['NCXM']['x'],
+						'NCXM_y': self.plat.params['NCXM']['y'],
+						'NCXM_Speed_Mod': self.plat.params['NCXM']['Speed_Mod'] / T,
+
+						'NCXM_a': self.plat.params['NCXM']['a'],
+						'NCXM_b': self.plat.params['NCXM']['b'],
+						'NCXM_c': self.plat.params['NCXM']['c'],
+						'NCXM_d': self.plat.params['NCXM']['d'],
+						'NCXM_g': self.plat.params['NCXM']['g'],
+						'NCXM_h': self.plat.params['NCXM']['h'],
+						'NCXM_j': self.plat.params['NCXM']['j'],
+						'NCXM_k': self.plat.params['NCXM']['k'],	
+
 						'P_Ca_c': self.plat.Pvar,
 						'P_Na_Ca': self.plat.PNaCavar, #self.imx.getparam[24][1],
 						'P_K_Ca': self.plat.PKCavar, #self.imx.getparam[24][2],
 						'P_Cl_Ca': self.plat.PClCavar, #self.imx.getparam[24][3],
-						
+
+						'Spip': 0.05,
+						'Smem': 1.,
+						'HypoChN': 0,
+						'HypoChP': 0.01,
 						}
 
 		#helper functions
 		self.DSargs.fnspecs = {
-						'J' : (['z_i', 'In', 'Ex', 'Na', 'K', 'Cl', 'Ca', 't'], '2. * r(z_i, Na, K, Cl, Ca, t) / (exp(r(z_i, Na, K, Cl, Ca, t)) - exp(-r(z_i, Na, K, Cl, Ca, t))) * (Ex * exp(-r(z_i, Na, K, Cl, Ca, t)) - In * exp(r(z_i, Na, K, Cl, Ca, t)))'),
+						'J' : (['z_i', 'In', 'Ex', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], '2. * r(z_i, Na, K, Cl, Ca, t, dPhi) / (exp(r(z_i, Na, K, Cl, Ca, t, dPhi)) - exp(-r(z_i, Na, K, Cl, Ca, t, dPhi))) * (Ex * exp(-r(z_i, Na, K, Cl, Ca, t, dPhi)) - In * exp(r(z_i, Na, K, Cl, Ca, t, dPhi)))'),
+						'JPip' : (['z_i', 'In', 'Ex', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], '2. * rPip(z_i, Na, K, Cl, Ca, t, dPhi) / (exp(rPip(z_i, Na, K, Cl, Ca, t, dPhi)) - exp(-rPip(z_i, Na, K, Cl, Ca, t, dPhi))) * (Ex * exp(-rPip(z_i, Na, K, Cl, Ca, t, dPhi)) - In * exp(rPip(z_i, Na, K, Cl, Ca, t, dPhi)))'),
 
-						'U_atp': (['t', 'Na', 'K', 'Cl', 'Ca'], 'J0_atp * f2 * ' + self.k1 + '*' + self.k1 + '*' + self.k2 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '/(' + self.a1 + '*' + self.a2 + '*' + self.bracket + ') / RestAtpaseRate'),
+						'U_atp': (['t', 'Na', 'K', 'Cl', 'Ca_cyt', 'dPhi'], 'J0_atp * f2 * ' + self.k1 + '*' + self.k1 + '*' + self.k2 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '/(' + self.a1 + '*' + self.a2 + '*' + self.bracket + ') / RestAtpaseRate'),
 
 						'U_NaK2Cl': (['Na', 'K', 'Cl', 't'], 'U0_NaK2Cl * (K_exf(t) * Na_exf(t) * pow(Cl_exf(t), 2) - K * Na * pow(Cl, 2))'),
 
@@ -432,10 +464,17 @@ class DST_interface:
 
 						'P_TRPC': (['t'], 'P_TRPC_0 * pow(IP3f(t) * 1e-6, n_TRPC)/(pow(K05_TRPC, n_TRPC) + pow(IP3f(t) * 1e-6, n_TRPC))'),
 
-						'r': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't'], 'z_i * Em(Na, K, Cl, Ca, t) * F / R / T / 2.'),
-						'V': (['Na', 'K', 'Cl', 't'], '1'),
-						'Em': (['Na', 'K', 'Cl', 'Ca', 't'], 'F / Cm * (K + Na + 2*Ca - Cl - z0 * W0(t))'),
+						'NCXM_Cout_E': (['NCXM_Cin_E', 'NCXM_Cin_Na', 'NCXM_Cout_Na', 'NCXM_Cin_Ca', 'NCXM_Cout_Ca'], '1 - NCXM_Cin_E - NCXM_Cin_Na - NCXM_Cout_Na - NCXM_Cin_Ca - NCXM_Cout_Ca'),
+						'J_NCX_Na': (['Na', 'NCXM_Cin_Na', 'NCXM_Cin_E'], 'NCXM_Speed_Mod * (NCXM_Cin_Na * NCXM_x - NCXM_e * NCXM_Cin_E * pow(Na * 1e3, 3))'),
+						'J_NCX_Ca': (['Ca', 'NCXM_Cin_Ca', 'NCXM_Cin_E'], 'NCXM_Speed_Mod * (NCXM_Cin_Ca * NCXM_y - NCXM_f * NCXM_Cin_E * Ca * 1e-3)'),
+
+						'r': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], 'z_i * Em(Na, K, Cl, Ca, t, dPhi) * F / R / T / 2.'),
+						'rPip': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], 'z_i * (Em(Na, K, Cl, Ca, t, dPhi) + dPhi) * F / R / T / 2.'),
+
+						'Em': (['Na', 'K', 'Cl', 'Ca_cyt', 't', 'dPhi'], 'F / Cm * (K + Na + 2*(Ca_cyt) - Cl - z0 * W0(t)) - 0*Spip/Smem*dPhi'),
+
 						'W0': (['t'], 'W0c * 1'),
+						'V': (['Na', 'K', 'Cl', 't'], '1'),
 
 						'Kca31': (['ca'], 'P_Kca31 * pow(ca, n_Kca31)/(pow(K05_Kca31, n_Kca31) + pow(ca, n_Kca31))'),
 						'Kca11': (['ca'], 'P_Kca11 * pow(ca, n_Kca11)/(pow(K05_Kca11, n_Kca11) + pow(ca, n_Kca11))'),
@@ -445,43 +484,139 @@ class DST_interface:
 						'Cl_exf': (['t'], 'Cl_ex'),
 						'Ca_exf': (['t'], 'Ca_ex'),
 						# 'IP3f': (['t'], '(heav(t-30.) + heav(t-60.) + heav(t-90.) + heav(t-120.) + heav(t-150.) + heav(t-180.) + heav(t-210.) + heav(t-240.) + heav(t-270.) + heav(t-300.)) * IP3max / 10'),
-						#IP3max* heav(t-20.) * (t-20) / exp(0.1 * (t-20)) / 0.1 / 2.7'),
+						# 'IP3f': (['t'], 'IP3max * heav(t-20.) * (t-20) / exp(0.1 * (t-20)) / 0.1 / 2.7'),
 						'IP3f': (['t'], 'IP3max'),
 
 						'Lf': (['t'], 'Na_exf(t) + Cl_exf(t) + K_exf(t) + Ca_exf(t)'),
 						}
 		#ODE
+		if (VoltClamp): self.PipettePotential = '0'
 		self.DSargs.varspecs = {
+							#currents through the cell membrane
 							'Na': self.Na_Flux,
 							'K': self.K_Flux,
 							'Cl': self.Cl_Flux,
-							'Ca_er': self.Ca_er_flux,
-							#'Ca': '(' + self.Ca_cyt_flux + ') + (' + self.Ca_er_flux + ')',
-							'Ca_cyt': self.Ca_cyt_flux,
-
+							'Ca': self.Ca_Flux,
+							'CaE': self.Ca_er_Flux,
+							'Ca_cyt': self.Ca_cyt_Flux,
+							#IP3rState
 							'x100': self.x100_rate,
 							'x110': self.x110_rate,
+							#Currents through the pipette part of the membrane
 
-							#'Em': 'F / Cm * (' + self.Na_Flux + '+' + self.K_Flux + '-(' + self.Cl_Flux + '))',
+							'Ip3Ch': self.Ip3Ch,
+
+							'PipetteCurrent': self.PipetteCurrent,
+							'dPhi': self.PipettePotential,
+
+							'NCXM_Cin_E': self.NCX_Model['NCXM_Cin_E'],
+							'NCXM_Cin_Na': self.NCX_Model['NCXM_Cin_Na'],
+							'NCXM_Cin_Ca': self.NCX_Model['NCXM_Cin_Ca'],
+							# 'NCXM_Cout_E': self.NCX_Model['NCXM_Cout_E'],
+							'NCXM_Cout_Na': self.NCX_Model['NCXM_Cout_Na'],
+							'NCXM_Cout_Ca': self.NCX_Model['NCXM_Cout_Ca'],
 							}
 		#initial condition	
-		self.DSargs.ics = {'Na': self.plat.Na_in, 'K': self.plat.K_in, 'Cl': self.plat.Cl_in, 'Ca_cyt': self.plat.Ca_in_cyt,'Ca_er': self.plat.Ca_in_er, 'x100': self.plat.imx.getparam[0][5], 'x110': self.plat.imx.getparam[0][5]} #'Ca': self.plat.Ca_in,
-		self.DSargs.tdomain = [self.imx.getparam[8][0], self.imx.getparam[8][1]]
-		self.DSargs.algparams = {'init_step': self.imx.getparam[8][2], 'max_pts': int(1e7)}
-		self.ode = dst.Generator.Radau_ODEsystem(self.DSargs)		# an instance of the 'Generator' class.
+		self.DSargs.ics = {'Na': self.plat.Na_in, 'K': self.plat.K_in, 'Cl': self.plat.Cl_in, 'Ca_cyt': self.plat.Ca_cyt_in, 
+							'x100': 0.02, 'x110': 0.02, 'Ca': 0.023, 'CaE': 200,
+							'Ip3Ch': 0.18, 'PipetteCurrent': 0., 'dPhi': 0., 
+							'NCXM_Cout_Na': self.plat.params['NCXM_init']['Cout_Na'], 'NCXM_Cout_Ca': self.plat.params['NCXM_init']['Cout_Ca'],
+							'NCXM_Cin_Ca': self.plat.params['NCXM_init']['Cin_Ca'], 'NCXM_Cin_Na': self.plat.params['NCXM_init']['Cin_Na'], 
+							'NCXM_Cin_E': self.plat.params['NCXM_init']['Cin_E']}
+		self.DSargs.tdomain = [self.plat.params['time'][0], self.plat.params['time'][1]]
+		self.DSargs.algparams = {'init_step': self.plat.params['time'][2], 'max_pts': int(1e7)}
+		# self.ode = dst.Generator.Radau_ODEsystem(self.DSargs)		# an instance of the 'Generator' class.
 
 	def Integrate(self, fName = 'integration.txt'):
+		self.ode = dst.Generator.Radau_ODEsystem(self.DSargs)
 		print('integration starts')
 		self.traj = self.ode.compute('Volume')
 		print('sampling starts')	
-		self.pts = self.traj.sample(dt=self.imx.getparam[8][2])
+		self.pts = self.traj.sample()
 		print('saving results')
 		f = open(fName, 'w')
-		f.write('time\tNa, mM\tK, mM\tCl, mM\tCa_cyt\tCa_er\tx100\tx110\n')
-		for k in range(len(self.pts['t'])):
-			f.write(str(self.pts['t'][k]) + '\t' + str(self.pts['Na'][k]) + '\t' + str(self.pts['K'][k]) + '\t' + str(self.pts['Cl'][k]) + '\t' + str(self.pts['Ca_cyt'][k]) + '\t' + str(self.pts['Ca_er'][k]) + '\t' + str(self.pts['x100'][k]) + '\t' + str(self.pts['x110'][k]) + '\n')
+		# f.write('time\tNa, mM\tK, mM\tCl, mM\tCa, mM\tCa_cyt\tCa_er\tx100\tx110\tPipCurrent\tdPhi\n')
+
+		coordNames = self.pts.coordnames
+		coordNames.insert(0, 't') #because Rob thinks that t, being an independent variable, should not be in the coordnames list
+		# print(coordNames)
+
+		for k in coordNames:
+			f.write(k + '\t')
+		f.write('\n')
+
+		for k in range(len(self.pts['t'])-1):
+			for name in coordNames:
+				f.write(str(self.pts[name][k]) + '\t')
+			f.write('\n')
+			# f.write(str(self.pts['t'][k]) + '\t' + str(self.pts['Na'][k]) + '\t' + str(self.pts['K'][k]) + '\t' + str(self.pts['Cl'][k]) + '\t' + str(self.pts['Ca'][k]) + '\t' + str(self.pts['Ca_cyt'][k]) + '\t' + 
+			# 	str(self.pts['CaE'][k]) + '\t' + str(self.pts['x100'][k]) + '\t' + str(self.pts['x110'][k]) + '\t' + str(self.pts['PipetteCurrent'][k]) + '\t' + str(self.pts['dPhi'][k]) + '\n')
 		f.close()
 		print('done, results saved to ' + fName)
+		gc.collect()
+
+		fp = len(self.pts['t']) - 1
+
+		f2 = open('TmpChAndT.dat', 'w')
+		f2.write(str([self.pts['t'][fp], self.DSargs.pars['HypoChN']]))
+		f2.close()
+
+		f1 = open('TmpIcs.dat', 'w')
+		f1.write(str({'Na': self.pts['Na'][fp], 'K': self.pts['K'][fp], 'Cl': self.pts['Cl'][fp], 'Ca_cyt': self.pts['Ca_cyt'][fp], 'x100': self.pts['x100'][fp], 'x110': self.pts['x110'][fp], 'Ca': self.pts['Ca'][fp], 'CaE': self.pts['CaE'][fp], 'Ip3Ch': self.pts['Ip3Ch'][fp], 'PipetteCurrent': self.pts['PipetteCurrent'][fp], 'dPhi': self.pts['dPhi'][fp]}))
+		f1.close()
+
+		return {'Na': self.pts['Na'][fp], 'K': self.pts['K'][fp], 'Cl': self.pts['Cl'][fp], 'Ca_cyt': self.pts['Ca_cyt'][fp], 'x100': self.pts['x100'][fp], 'x110': self.pts['x110'][fp], 'Ca': self.pts['Ca'][fp], 'CaE': self.pts['CaE'][fp], 'Ip3Ch': self.pts['Ip3Ch'][fp], 'PipetteCurrent': self.pts['PipetteCurrent'][fp], 'dPhi': self.pts['dPhi'][fp]}
+
+
+	def IntegrateGetLastTwo(self, var_names = ['t']):
+		self.ode = dst.Generator.Radau_ODEsystem(self.DSargs)
+		print('integration starts')
+		self.traj = self.ode.compute('Volume')
+		print('sampling starts')	
+		self.pts = self.traj.sample()
+		temp = []
+		length = len(self.pts['t'])
+		print('returning the last values at ' + str(self.pts['t'][length-1]) + ' s') 
+		for var in var_names:
+			temp.append([self.pts[var][length-2], self.pts[var][length-1]])
+		gc.collect()
+		return temp
+
+	def CreateNewSaveFile(self, fName = 'temp.txt'):
+		f = open(fName, 'w')
+		f.write('time\tNa, mM\tK, mM\tCl, mM\tCa, mM\tCa_cyt\tCa_er\tx100\tx110\tPipCurrent\tdPhi\n')
+		f.close()
+
+
+	def IntegrateAppendFile(self, ics, t0, t1, fName = 'temp.txt'):
+		print('setting the parametres and ics')
+		self.DSargs.ics = ics #{'Na':  'K': 'Cl': 'Ca_cyt': 'x100': 'x110': 'Ca': 'CaE': 'Ip3Ch': 'PipetteCurrent': 'dPhi': }
+		self.DSargs.tdomain = [t0, t1]
+		# self.DSargs.pars.update(channels)
+		self.ode = dst.Generator.Radau_ODEsystem(self.DSargs)
+		print('integrating from ' + str(self.DSargs.tdomain[0]) + ' to ' + str(self.DSargs.tdomain[1]))
+		self.traj = self.ode.compute('Volume')
+		print('sampling starts')	
+		self.pts = self.traj.sample()
+		f = open(fName, 'a')
+		for k in range(len(self.pts['t'])-1):
+			f.write(str(self.pts['t'][k]) + '\t' + str(self.pts['Na'][k]) + '\t' + str(self.pts['K'][k]) + '\t' + str(self.pts['Cl'][k]) + '\t' + str(self.pts['Ca'][k]) + '\t' + str(self.pts['Ca_cyt'][k]) + '\t' + 
+				str(self.pts['CaE'][k]) + '\t' + str(self.pts['x100'][k]) + '\t' + str(self.pts['x110'][k]) + '\t' + str(self.pts['PipetteCurrent'][k]) + '\t' + str(self.pts['dPhi'][k]) + '\n')
+		f.close()
+		gc.collect()
+
+		fp = len(self.pts['t']) - 1
+
+		f2 = open('TmpChAndT.dat', 'w')
+		f2.write(str([self.pts['t'][fp], self.DSargs.pars['HypoChN']]))
+		f2.close()
+
+		f1 = open('TmpIcs.dat', 'w')
+		f1.write(str({'Na': self.pts['Na'][fp], 'K': self.pts['K'][fp], 'Cl': self.pts['Cl'][fp], 'Ca_cyt': self.pts['Ca_cyt'][fp], 'x100': self.pts['x100'][fp], 'x110': self.pts['x110'][fp], 'Ca': self.pts['Ca'][fp], 'CaE': self.pts['CaE'][fp], 'Ip3Ch': self.pts['Ip3Ch'][fp], 'PipetteCurrent': self.pts['PipetteCurrent'][fp], 'dPhi': self.pts['dPhi'][fp]}))
+		f1.close()
+
+		return {'Na': self.pts['Na'][fp], 'K': self.pts['K'][fp], 'Cl': self.pts['Cl'][fp], 'Ca_cyt': self.pts['Ca_cyt'][fp], 'x100': self.pts['x100'][fp], 'x110': self.pts['x110'][fp], 'Ca': self.pts['Ca'][fp], 'CaE': self.pts['CaE'][fp], 'Ip3Ch': self.pts['Ip3Ch'][fp], 'PipetteCurrent': self.pts['PipetteCurrent'][fp], 'dPhi': self.pts['dPhi'][fp]}
+
 
 	def Diagram(self):
 		self.ode.set(pars = {'IP3max': 0.00})
@@ -503,6 +638,225 @@ class DST_interface:
 		PC['EQ1'].forward()
 		PC.display(['IP3max', 'Em'], stability=True)
 
+class notstoch:
+	def __init__(self):
+		self.t0 = 0.
+		self.t1 = 30.
+		self.dT = 0.001
+
+		self.channels = 100.
+		self.open_channels = 0.
+
+		self.pts = []
+		self.DST = []
+
+	def p_open(self, stationar, tau):
+		return stationar / tau * self.dT
+
+	def p_close(self, stationar, tau):
+		return (1 - stationar) / tau * self.dT
+
+	def binomial_probability(self,n,k,p):
+		if (n>=k) and (p<=1):
+			return float(m.factorial(n))/float(m.factorial(n-k))/float(m.factorial(k))*pow(p, k)*pow(1-p, n-k)
+		else:
+			raise Exception('text')
+
+	def delta_channels(self, nch, prob):
+		if (nch == 0.):
+			return 0.
+		rgn = rng.random()
+		# print(rgn)
+		probsum = 0.
+		for i in range(round(nch+1)):
+			probsum += self.binomial_probability(nch, i, prob)
+			# print('ps = ' + str(probsum))
+			if (probsum >= rgn):
+				return i
+		
+	
+	def DoTheTest(self, tau, stat):
+		temp_X = []
+		temp_Y = []
+		for t_step in np.arange(self.t0, self.t1, self.dT):
+			self.open_channels = self.open_channels + self.delta_channels(self.channels - self.open_channels, self.p_open(stat, tau)) - self.delta_channels(self.open_channels, self.p_close(stat, tau))
+			# print(self.delta_channels(self.channels - self.open_channels, self.p_open(0.7, 1.)), self.delta_channels(self.open_channels, self.p_close(0.7, 1.)), self.p_open(0.7, 1.), self.p_close(0.7, 1.))
+			temp_X.append(t_step)
+			temp_Y.append(self.open_channels)
+
+		plt.figure()
+		plt.plot(temp_X, temp_Y, 'b', temp_X, np.full(np.shape(temp_X), np.average(temp_Y)), 'r')
+		plt.xlabel('time, s')                              		# Axes labels
+		plt.ylabel('open_channels')								# Range of the y axis
+		plt.ylim(-0.01, self.channels+0.01)
+		plt.title('test')										# Figure title from model name
+		plt.show()
+
+	def HypoStat(self, Ca):
+		return pow(Ca*1e-6, 5)/(pow(0.2e-6, 5) + pow(Ca*1e-6, 5))
+
+	def StartTheThing(self):
+		#First iteration
+		HypoCh = 0
+		HypoChTotal = 1
+
+		plat = platelet_config(iSolution = -1)
+		plat.MakeStationary()
+		DST = DST_interface(iPlat = plat)
+		DST.DSargs.tdomain = [self.t0, self.t0 + self.dT]
+		ics = DST.Integrate(fName = 'temp.txt')
+		#Starting the cycle with given 
+	
+	def ContinueTheThing(self):
+		f2 = open('Temp/TmpChAndT.dat', 'r')
+		thing = ast.literal_eval(f2.readline())
+		HypoChTotal = 1
+		HypoCh = thing[1]
+		f2.close()
+
+		f1 = open('Temp/TmpIcs.dat', 'r')
+		ics = ast.literal_eval(f1.readline())
+		f1.close()
+
+		plat = platelet_config(iSolution = -1)
+		plat.MakeStationary()
+		DST = DST_interface(iPlat = plat)
+
+		HypoCh = HypoCh + self.delta_channels(HypoChTotal - HypoCh, self.p_open(self.HypoStat(ics['Ca']), 0.01)) - self.delta_channels(HypoCh, self.p_close(self.HypoStat(ics['Ca']), 0.01))
+		DST.DSargs.pars['HypoChN'] = HypoCh
+
+		DST.IntegrateAppendFile(ics = ics, fName = 'temp.txt', t0 = thing[0], t1 = thing[0] + self.dT)
+
+	def Do500Continues(self):
+		for i in range(500):
+			self.ContinueTheThing()
+
+	def DoTheThing(self):
+		#First iteration
+		HypoCh = 0
+		HypoChTotal = 1
+
+		plat = platelet_config(iSolution = -1)
+		plat.MakeStationary()
+		DST = DST_interface(iPlat = plat)
+		DST.DSargs.tdomain = [self.t0, self.t0 + self.dT]
+		ics = DST.Integrate(fName = 'temp.txt')
+		#Starting the cycle with given 
+		for t_step in np.arange(self.t0+self.dT, self.t1, self.dT):
+			# gc.collect()
+			# DST = DST_interface(iPlat = plat)
+			# DST.DSargs.tdomain = [t_step, t_step + dT]
+			HypoCh = HypoCh + self.delta_channels(HypoChTotal - HypoCh, self.p_open(self.HypoStat(ics['Ca']), 0.01)) - self.delta_channels(HypoCh, self.p_close(self.HypoStat(ics['Ca']), 0.01))
+			DST.DSargs.pars['HypoChN'] = HypoCh
+			ics = DST.IntegrateAppendFile(ics = ics, fName = 'temp.txt', t0 = t_step, t1 = t_step + self.dT)
+
+class plotter:
+	def __init__(self, iPlat, fName, i_skip = 0):
+
+		self.tempts = []
+		self.fName = fName
+		self.plat = iPlat
+		self.names = []
+		self.pts = {}
+		skip = i_skip
+		cur = 0
+		f = open(self.fName, 'r')
+		#reads a header and creates columns
+		subpts = f.readline()
+		while '\t' in subpts[cur:]:
+			dcur = subpts[cur:].find('\t') #how far is \t from current postion on the line
+			self.pts[subpts[cur:cur+dcur]] = []
+			# self.names.append(subpts[cur:cur+dcur])
+			cur = cur + dcur + 1
+		cur = 0
+		width = len(self.pts)
+		subpts = f.readline() #do-while is not supported sadge
+		#reads lines one by one and fills the lines of the array with info
+		while subpts != '':
+			for k in iter(self.pts):
+				dcur = subpts[cur:].find('\t')
+				self.pts[k].append(float(subpts[cur:cur+dcur]))
+				cur = cur + dcur + 1
+			cur = 0
+			if skip != 0: 
+				for i in range(skip-1): f.readline()
+			subpts = f.readline()
+		print('report file read, generated temp array with  ' + str(len(self.pts['t'])) + ' lines and ' + str(len(self.pts)) + ' columns')
+
+		f.close()
+
+	def interactivePlotter():
+		colours = ['r', 'g', 'b']
+
+	def Plot_Concentrations(self, what):
+		plt.figure()
+		plt.plot(self.pts['t'], self.pts[what])
+		plt.xlabel('time, s')                              				# Axes labels
+		plt.ylabel(what  + ', M?')								# Range of the y axis
+		plt.ylim(1.05*min(self.pts[what]), 0.95*max(self.pts[what]))
+		plt.title(what + ' concentration over time')			# Figure title from model name
+		plt.show()
+
+	def Plot_Em(self):
+		for k in range(0,len(self.pts['t'])):
+			self.tempts.append(self.plat.Give_Em(self.pts['Na'][k], self.pts['K'][k], self.pts['Cl'][k], self.pts['Ca_cyt'][k]))
+		plt.figure(1)
+		plt.plot(self.pts['t'], self.tempts)
+		plt.xlabel('time, s')                              # Axes labels
+		plt.ylabel('Em, V')                                 # Range of the y axis
+		plt.ylim(0.9*max(self.tempts), 1.1*min(self.tempts))
+		plt.title('Em over time')                             # Figure title from model name
+		plt.show()
+		del self.tempts[:]
+		self.tempts = []
+
+	def Plot_NaKCl(self):
+		# imx = InitIonMatrix()
+		# for l in range(0,len(self.pts[what])):
+		# 	self.pts[what][l] = self.pts[what][l] * 1e3
+		plt.figure()
+		plt.plot(self.pts['t'], self.pts['Na'], 'r', self.pts['t'], self.pts['K'], 'b', self.pts['t'], self.pts['Cl'], 'g')
+		plt.xlabel('time, s')                              				# Axes labels
+		plt.ylabel('[Na] [K] and [Cl], M')								# Range of the y axis
+		plt.ylim(0, 1.05*max(self.pts['K']))
+		plt.title('concentration over time')			# Figure title from model name
+		plt.show()
+
+	def Plot_Ca(self):
+		tmppts = []
+		for l in range(0,len(self.pts['t'])):
+			tmppts.append((self.pts['Ca'][l]))
+		plt.figure()
+		plt.plot(self.pts['t'], tmppts)
+		plt.xlabel('time, s')                              				# Axes labels
+		plt.ylabel('Ca, $\mu$M')								# Range of the y axis
+		plt.ylim(0.95*min(tmppts), 1.05*max(tmppts))
+		plt.title('Ca concentration over time')			# Figure title from model name
+		plt.show()
+
+	def Plot_NCX_Species(self):
+		fig, axs = plt.subplots(ncols=1, nrows=2,constrained_layout=True, figsize=(5.5, 3.5))
+		self.pts['NCXM_Cout_E'] = []
+		for k in range(0,len(self.pts['t'])):
+			self.pts['NCXM_Cout_E'].append(1 - self.pts['NCXM_Cout_Na'][k] - self.pts['NCXM_Cout_Ca'][k] - self.pts['NCXM_Cin_E'][k] - self.pts['NCXM_Cin_Ca'][k] - self.pts['NCXM_Cin_Na'][k])
+
+		axs[0].plot(self.pts['t'], self.pts['NCXM_Cin_E'], 'r', self.pts['t'], self.pts['NCXM_Cin_Ca'], 'g',self.pts['t'], self.pts['NCXM_Cin_Na'], 'b')
+		axs[1].plot(self.pts['t'], self.pts['NCXM_Cout_E'], 'r', self.pts['t'], self.pts['NCXM_Cout_Ca'], 'g',self.pts['t'], self.pts['NCXM_Cout_Na'], 'b')
+		plt.title('NCX species distribution')
+		plt.show()
+
+	def Plot_NCX_Currents(self):
+		fig, axs = plt.subplots(ncols=1, nrows=1,constrained_layout=True, figsize=(5.5,3.5))
+		tmppts = {'CaCur': [], 'NaCur': []}
+		for k in range(0,len(self.pts['t'])):
+			tmppts['NaCur'].append(self.plat.params['NCXM']['Speed_Mod'] * (self.pts['NCXM_Cin_Na'][k] * self.plat.params['NCXM']['x'] - self.plat.params['NCXM']['e'] * self.pts['NCXM_Cin_E'][k] * pow(self.pts['Na'][k] * 1e3, 3)))
+			tmppts['CaCur'].append(self.plat.params['NCXM']['Speed_Mod'] * (self.pts['NCXM_Cin_Ca'][k] * self.plat.params['NCXM']['y'] - self.plat.params['NCXM']['f'] * self.pts['NCXM_Cin_E'][k] * self.pts['Ca'][k] * 1e-3))
+		axs.plot(self.pts['t'], tmppts['CaCur'], 'r', self.pts['t'], tmppts['NaCur'], 'g')
+		plt.title('NCX Fluxes')
+		plt.show()
+
+### DEPRECATED ###
+### MOVING TO ANOTHER CLASS ###
 class plotncalc:
 	def __init__(self, iPlat, fName, i_skip = 0):
 		self.tempts = []
@@ -516,40 +870,25 @@ class plotncalc:
 		#reads a header and creates columns
 		subpts = f.readline()
 		while '\t' in subpts[cur:]:
-			dcur = subpts[cur:].find('\t')
+			dcur = subpts[cur:].find('\t') #how far is \t from current postion on the line
 			self.pts.append([])
 			self.names.append(subpts[cur:cur+dcur])
 			cur = cur + dcur + 1
-		self.pts.append([])
-		self.names.append(subpts[cur:cur+dcur])	
 		cur = 0
 		width = len(self.pts)
-		subpts = f.readline()
+		subpts = f.readline() #do-while is not supported sadge
 		#reads lines one by one and fills the lines of the array with info
 		while subpts != '':
-			for k in range(width-1):
+			for k in range(width):
 				dcur = subpts[cur:].find('\t')
 				self.pts[k].append(float(subpts[cur:cur+dcur]))
 				cur = cur + dcur + 1
-			dcur = subpts[cur:].find('\n')
-			self.pts[width-1].append(float(subpts[cur:cur+dcur]))
 			cur = 0
-			for i in range(skip-1): f.readline()
+			if skip != 0: 
+				for i in range(skip-1): f.readline()
 			subpts = f.readline()
 		print('report file read, generated temp array with  ' + str(len(self.pts[0])) + ' lines and ' + str(len(self.pts)) + ' columns')
 		f.close()
-
-	def Plot_Concentrations(self, what = 0):
-		imx = InitIonMatrix()
-		# for l in range(0,len(self.pts[what])):
-		# 	self.pts[what][l] = self.pts[what][l] * 1e3
-		plt.figure()
-		plt.plot(self.pts[0], self.pts[what])
-		plt.xlabel('time, s')                              				# Axes labels
-		plt.ylabel(self.names[what]  + ', M')								# Range of the y axis
-		# plt.ylim(0.95*min(self.pts[what]), 1.05*max(self.pts[what]))
-		plt.title(self.names[what] + ' concentration over time')			# Figure title from model name
-		plt.show()
 
 	def Plot_Conc_Ca(self):
 		imx = InitIonMatrix()
@@ -564,25 +903,14 @@ class plotncalc:
 		plt.title('Ca concentration over time')			# Figure title from model name
 		plt.show()
 
-	def Plot_Em(self):
-		for k in range(0,len(self.pts[1])):
-			self.tempts.append(self.plat.Give_Em(self.pts[1][k], self.pts[2][k], self.pts[3][k], self.pts[4][k]))
-		plt.figure(1)
-		plt.plot(self.pts[0], self.tempts)
-		plt.xlabel('time, s')                              # Axes labels
-		plt.ylabel('Em, V')                                 # Range of the y axis
-		plt.ylim(0.9*max(self.tempts), 1.1*min(self.tempts))
-		plt.title('Em over time')                             # Figure title from model name
-		plt.show()
-		del self.tempts[:]
-		self.tempts = []
-
 	def Plot_Conc_Change(self, what = 0):
 		tmpptst = []
 		for k in range(0,len(self.pts[0])-1):
 			tmpptst.append(self.pts[0][k])
 		for k in range(0,len(self.pts[0])-1):
-			self.tempts.append((self.pts[what][k+1] - self.pts[what][k])/(self.pts[0][k+1] - self.pts[0][k]))
+			if (self.pts[0][k+1] - self.pts[0][k]) != 0:
+				self.tempts.append((self.pts[what][k+1] - self.pts[what][k])/(self.pts[0][k+1] - self.pts[0][k]))
+			else: self.tempts.append(self.tempts[k-1])
 		plt.figure(1)
 		plt.plot(tmpptst, self.tempts)
 		plt.xlabel('time, m')                              # Axes labels
@@ -591,6 +919,161 @@ class plotncalc:
 		plt.show()
 		del self.tempts[:]
 		self.tempts = []
+
+	def Plot_Conc_Change_Histogram(self, what = 0):
+		tmpptst = []
+		for k in range(0,len(self.pts[0])-1):
+			tmpptst.append(self.pts[0][k])
+		for k in range(0,len(self.pts[0])-1):
+			if (self.pts[0][k+1] - self.pts[0][k]) != 0:
+				self.tempts.append((self.pts[what][k+1] - self.pts[what][k])/(self.pts[0][k+1] - self.pts[0][k]))
+			else: self.tempts.append(self.tempts[k-1])
+		values = []
+		cumulative = []
+		for k in range(1,len(self.tempts)-2):
+			deriv = self.tempts[k]
+			dr = round(deriv, 16)
+			if dr in values:
+				cumulative[values.index(dr)] += (self.pts[0][k+1] - self.pts[0][k-1])/2
+				# print('+1')
+			else:
+				values.append(dr)
+				cumulative.append((self.pts[0][k-1] + self.pts[0][k+1])/2)
+		print(values)
+		plt.figure(1)
+		plt.plot(values, cumulative, '.b')
+		plt.xlabel('current')                              # Axes labels
+		plt.ylabel('appearances')                                 # Range of the y axis
+		plt.title('histogram of ' + self.names[what])                             # Figure title from model name
+		plt.show()
+		del self.tempts[:]
+		self.tempts = []
+
+	def Plot_Conc_Change_Histogram(self, what = 0):
+		tmpptst = []
+		for k in range(0,len(self.pts[0])-1):
+			tmpptst.append(self.pts[0][k])
+		for k in range(0,len(self.pts[0])-1):
+			if (self.pts[0][k+1] - self.pts[0][k]) != 0:
+				self.tempts.append((self.pts[what][k+1] - self.pts[what][k])/(self.pts[0][k+1] - self.pts[0][k]))
+			else: self.tempts.append(self.tempts[k-1])
+		xvals = np.linspace(self.pts[0][0], self.pts[0][len(self.pts[0])-1], len(self.pts[0])*5)
+		print(len(self.pts[0]))
+		print(len(self.tempts))
+
+		yinterp = np.interp(xvals, self.pts[0][1:], self.tempts)
+		yinterp = yinterp / 0.05
+		weights = np.ones_like(yinterp) / len(yinterp)
+
+		plt.hist(x=yinterp, bins=100, weights=weights)
+		plt.xlabel('проводимости, пСм')                              # Axes labels
+		plt.ylabel('количество точек')                       
+		# plt.yscale('log')          # Range of the y axis
+		plt.title('histogram of ' + self.names[what])                             # Figure title from model name
+		plt.show()
+
+		# values = []
+		# cumulative = []
+		# for k in range(1,len(yinterp)-1):
+		# 	deriv = yinterp[k]
+		# 	dr = round(deriv, 16)
+		# 	if dr in values:
+		# 		cumulative[values.index(dr)] +=1
+		# 		# print('+1')
+		# 	else:
+		# 		values.append(dr)
+		# 		cumulative.append(1)
+		# print(values)
+		# plt.figure(1)
+		# plt.plot(values, cumulative, '.b')
+		# plt.xlabel('current')                              # Axes labels
+		# plt.ylabel('appearances')                                 # Range of the y axis
+		# plt.title('histogram of ' + self.names[what])                             # Figure title from model name
+		# plt.show()
+		del self.tempts[:]
+		self.tempts = []
+
+	def Plot_Ca_Em(self):
+		fig, ax1 = plt.subplots()
+
+		for k in range(0,len(self.pts[0])):
+			self.tempts.append(self.plat.Give_Em(self.pts[1][k], self.pts[2][k], self.pts[3][k], self.pts[5][k]))
+
+		color = 'tab:red'
+		ax1.set_xlabel('время, с')
+		ax1.set_ylabel('Em, В')
+		ax1.plot(self.pts[0], self.tempts, color=color)
+		ax1.set_ylim(0.98*max(self.tempts), 1.02*min(self.tempts))
+
+		ax1.tick_params(axis='y', labelcolor=color)
+
+
+		imx = InitIonMatrix()
+		tmppts2 = []
+		for l in range(0,len(self.pts[1])):
+			tmppts2.append((self.pts[4][l] + self.pts[5][l]))
+
+		ax2 = ax1.twinx()
+		color = 'tab:blue'
+		ax2.set_ylabel('[Ca], мкМ')
+		ax2.plot(self.pts[0], tmppts2, color=color)
+		ax2.tick_params(axis='y', labelcolor=color)
+		ax2.set_ylim(0.9*min(tmppts2), 1.1*max(tmppts2))
+
+		fig.tight_layout()
+		plt.show()	
+
+
+	def Plot_Flux_and_Ca(self):
+		fig, ax1 = plt.subplots()
+
+		color = 'tab:red'
+
+		tmpptst = []
+		what = 9
+		for k in range(0,len(self.pts[0])-1):
+			tmpptst.append(self.pts[0][k])
+		for k in range(0,len(self.pts[0])-1):
+			self.tempts.append(3e12*(self.pts[what][k+1] - self.pts[what][k])/(self.pts[0][k+1] - self.pts[0][k]) + (self.pts[what+1][k+1] - self.pts[what+1][k])/(self.pts[0][k+1] - self.pts[0][k]))
+		plt.figure(1)
+		ax1.plot(tmpptst, self.tempts)
+		ax1.set_xlabel('время, c')                              # Axes labels
+		ax1.set_ylabel('ток, пА')                                 # Range of the y axis
+		ax1.tick_params(axis='y', labelcolor=color)
+		ax1.plot(self.pts[0][1:], self.tempts, color=color)
+		ax1.set_ylim(0.9*min(self.tempts), 1.1*max(self.tempts))
+
+		imx = InitIonMatrix()
+		tmppts2 = []
+		for l in range(0,len(self.pts[1])-1):
+			tmppts2.append((self.pts[4][l] + self.pts[5][l]))
+
+		ax2 = ax1.twinx()
+		color = 'tab:blue'
+		ax2.set_ylabel('[Ca], мкМ')
+		ax2.plot(self.pts[0][1:], tmppts2, color=color)
+		ax2.tick_params(axis='y', labelcolor=color)
+		ax2.set_ylim(0.9*min(tmppts2), 1.1*max(tmppts2))
+
+		fig.tight_layout()
+		plt.show()
+
+	def Plot_Pip_Current(self):
+		tmpptst = []
+		what = 9
+		for k in range(0,len(self.pts[0])-1):
+			tmpptst.append(self.pts[0][k])
+		for k in range(0,len(self.pts[0])-1):
+			self.tempts.append(3e12*(self.pts[what][k+1] - self.pts[what][k])/(self.pts[0][k+1] - self.pts[0][k]) + (self.pts[what+1][k+1] - self.pts[what+1][k])/(self.pts[0][k+1] - self.pts[0][k]))
+		plt.figure(1)
+		plt.plot(tmpptst, self.tempts)
+		plt.xlabel('время, c')                              # Axes labels
+		plt.ylabel('ток, пА')                                 # Range of the y axis
+		plt.title('Ток через мембрану под пипеткой')                             # Figure title from model name
+		plt.show()
+		del self.tempts[:]
+		self.tempts = []
+
 
 	def Plot_atpase_specimens_main(self):
 		imx = InitIonMatrix()
@@ -679,6 +1162,24 @@ class otherfunctions:
 
 			raise NameError()
 
+	def plotVAC(self):
+		temp = []
+		Amperes = []
+		Volts = []
+		plat = platelet_config(iSolution = -1)
+		for d in np.linspace(-0.010, 0.090, 100):
+			plat.dPhiInit = d
+			DST = DST_interface(iPlat = plat)
+			temp.append(DST.IntegrateGetLastTwo(var_names = ['t', 'dPhi', 'PipetteCurrent']))
+		for i in range(len(temp)):
+			Amperes.append((temp[i][2][0] - temp[i][2][1])/(temp[i][0][1] - temp[i][0][0])*1e12)
+			Volts.append((temp[i][1][0]+plat.params['em default'][0])*1e3)
+		plt.figure(1)
+		plt.plot(Volts, Amperes)
+		plt.xlabel('membrane voltage, mV')                              # Axes labels
+		plt.ylabel('patch current, pA')                                 # Range of the y axis
+		plt.show()
+
 	def calc_em_elast(self, delta = 1e-6):
 		variables = [[0,7],[4,3],[7,1],[10,18],[11,1],[12,3],[13,1],[14,1],[16,3],[19,3],[25,3],[26,3]]
 		report = []
@@ -689,7 +1190,7 @@ class otherfunctions:
 		imx = InitIonMatrix()
 		tmppts = []
 		plat = platelet_config(iimx = imx)
-		plat.Calc_permeabilities_from_channels()
+		plat.MakeStationary()
 		DST = DST_interface(iPlat = plat)
 		DST.DSargs.tdomain = [0., 30.]
 		DST.Integrate(fName = fname)
@@ -708,7 +1209,7 @@ class otherfunctions:
 					maximums[0][1] = imx.getparam[variables[k][0]][n] #<-------------
 					tmppts = []
 					plat = platelet_config(iimx = imx)
-					plat.Calc_permeabilities_from_channels()
+					plat.MakeStationary()
 					DST = DST_interface(iPlat = plat)
 					DST.Integrate(fName = fname)
 					plotty = plotncalc(iPlat = plat, fName = fname)
@@ -727,7 +1228,7 @@ class otherfunctions:
 	def find_maxs(self):
 		tmppst = []	
 		plat = platelet_config(iimx = imx)
-		plat.Calc_permeabilities_from_channels()
+		plat.MakeStationary()
 		DST = DST_interface(iPlat = plat)
 		DST.DSargs.tdomain = [0., 300.]
 		DST.DSargs.algparams = {'init_step': 0.001}
@@ -745,7 +1246,7 @@ class otherfunctions:
 		for ip3iterative in x:
 			tmppst = []	
 			plat = platelet_config(iimx = imx)
-			plat.Calc_permeabilities_from_channels()
+			plat.MakeStationary()
 			DST = DST_interface(iPlat = plat)
 			DST.DSargs.tdomain = [0., 300.]
 			DST.DSargs.algparams = {'init_step': 0.001}
@@ -792,7 +1293,7 @@ class otherfunctions:
 		imx[0].getparam[0][ion] += d
 		imx[2].getparam[0][ion] -= d
 		plat = [platelet_config(iimx = imx[k]) for k in (0,1,2)]
-		for k in (0,1,2): plat[k].Calc_permeabilities_from_channels()
+		for k in (0,1,2): plat[k].MakeStationary()
 		limL = np.array([
 			(plat[1].P_Na - plat[0].P_Na) / d / (plat[1].P_Na + plat[0].P_Na) * 2. * POI,
 			(plat[1].P_K - plat[0].P_K) / d / (plat[1].P_K + plat[0].P_K) * 2. * POI,
@@ -817,7 +1318,7 @@ class otherfunctions:
 
 	def plotPf(self, na, k, cl, ca, em=0):
 		plat = platelet_config(iK_in=k, iNa_in=na, iCl_in=cl, iCa_in=ca, iEm = em)
-		plat.Calc_permeabilities_from_channels()
+		plat.MakeStationary()
 		return (plat.P_Na, plat.P_K, plat.P_Cl, plat.P_Ca)
 
 	def plot2D_permeability(self, ionoi = 2, iondep = 2): #ionoi - y, iondep - x
@@ -835,7 +1336,7 @@ class otherfunctions:
 	def plotFamily_Concentrations_volume(self):
 		imx = InitIonMatrix()
 		plat = [platelet_config(iSol_Na_ex = imx.getparam[4+i][0], iSol_K_ex = imx.getparam[4+i][1], iSol_Cl_ex = imx.getparam[4+i][2]) for i in (0,1,2)]
-		for i in (0,1,2): plat[i].Calc_permeabilities_from_channels()
+		for i in (0,1,2): plat[i].MakeStationary()
 		plot = []
 		time = []
 		for i in (0,1,2):
@@ -867,7 +1368,7 @@ class otherfunctions:
 
 	def Phase_Plane(self, dr = 0.5, numofpoints = 8):
 		plat = platelet_config(iSolution = -1)
-		plat.Calc_permeabilities_from_channels()
+		plat.MakeStationary()
 		defNa = plat.Na_ex
 		defK = plat.K_ex
 		for i in range(numofpoints):
@@ -944,7 +1445,7 @@ class otherfunctions:
 			x.append((k + 1) * 0.00125)
 			plat.Sol_Na_ex = asdad - plat.Sol_K_ex
 			# plat.K_in = 0.078
-			plat.Calc_permeabilities_from_channels()
+			plat.MakeStationary()
 			DST = DST_interface_EQPoint(iPlat = plat)
 			y.append(DST.Get_Eq_Point(r = 'em'))
 			print(y)
@@ -968,7 +1469,7 @@ class otherfunctions:
 			plat.PNaCavar = kions[0]
 			plat.PKCavar = kions[1]
 			plat.PClCavar = kions[2]
-			plat.Calc_permeabilities_from_channels()
+			plat.MakeStationary()
 			DST = DST_interface_EQPoint(iPlat = plat)
 			y.append(DST.Get_Eq_Point(r = 'em'))
 			print(DST.Get_Eq_Point(r = 'concentrations'))
@@ -994,7 +1495,7 @@ class otherfunctions:
 			plat.PNaCavar = kions[0]
 			plat.PKCavar = kions[1]
 			plat.PClCavar = kions[2]
-			plat.Calc_permeabilities_from_channels()
+			plat.MakeStationary()
 			DST = DST_interface_EQPoint(iPlat = plat)
 			yraw = DST.Get_Eq_Point(r = 'concentrations')
 			for i in range(3): y[i].append(yraw[i])
@@ -1004,3 +1505,4 @@ class otherfunctions:
 		plt.ylabel('[], mM')
 		plt.xlabel('P_add, 1/h, k_Na = ' + str(kions[0]) +', k_K = '+ str(kions[1]) + ', k_Cl = ' + str(kions[2]))
 		plt.show()
+
