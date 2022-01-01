@@ -1,0 +1,6 @@
+#!/bin/bash
+sudo python3 startstochpy.py
+for (( i=1; i <= 100; i++))
+do
+sudo python3 contstochpy.py
+done

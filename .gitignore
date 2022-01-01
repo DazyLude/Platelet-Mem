@@ -7,7 +7,13 @@
 # Eldritch imagery folders
 
 /Pics/**
+/pics/**
+/BackUps/**
+/model20.py
+
 
 # temporary files to save trajectories
 
 *.txt
+*.dat
+*.pyc
