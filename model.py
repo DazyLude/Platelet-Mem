@@ -259,13 +259,13 @@ class DST_interface:
 		T = 3600 #constant defining conversion rate of permeabilities: in imx they are 1/h, here they are 1/s by default
 		self.plat = copy.copy(iPlat)
 		#ions		
-		self.Ca_cyt_Flux = '((P_Ca + P_TRPC(t) * TRPC_Ca) * J(2., (Ca*1e-6), Ca_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) - J_PMCA(Ca*1e-6) - J_NCX_Ca(Ca, NCXM_Cin_Ca, NCXM_Cin_E))'
-		self.Ca_er_Flux = '-20*((fv0*(CaE-Ca)-fv1*(Ca-CaE)*x110**fA)**fB-fv3*Ca**2/(Ca**2+fk3**2)-fv4*Ca**2/(Ca**2+fk4**2))'
+		self.Ca_cyt_Flux = '((P_Ca + P_TRPC(t) * TRPC_Ca) * J(2., (Ca*1e-6), Ca_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) - J_PMCA(Ca*1e-6) - J_NCX_Ca(Ca, NCXM_Cin_Ca, NCXM_Cin_E))*0'
+		self.Ca_er_Flux = '-20*((fv0*(CaE-Ca)-fv1*(Ca-CaE)*x110**fA)**fB-fv3*Ca**2/(Ca**2+fk3**2)-0*fv4*Ca**2/(Ca**2+fk4**2))'
 
 		self.Na_Flux = '-3 * U_atp(t, Na, K, Cl, Ca_cyt, dPhi) + (P_Na + P_TRPC(t) * TRPC_Na) * J(1, Na, Na_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) + U_NaK2Cl(Na, K, Cl, t) - 3 * J_NCX_Na(Na, NCXM_Cin_Na, NCXM_Cin_E)'
 		self.K_Flux = '2 * U_atp(t, Na, K, Cl, Ca_cyt, dPhi) + (Kca31(Ca*1e-6) + P_TRPC(t) * TRPC_K + P_K + PKv13i / (1 + exp((Em(Na, K, Cl, Ca_cyt, t, dPhi) - PKv13h) / PKv13s))) * J(1, K, K_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) + U_NaK2Cl(Na, K, Cl, t)'
 		self.Cl_Flux = '(P_Cl + P_Ca_c * P_Cl_Ca) * J(-1, Cl, Cl_exf(t), Na, K, Cl, Ca_cyt, t, dPhi) + 2. * U_NaK2Cl(Na, K, Cl, t)' 
-		self.Ca_Flux = '(((fv0*(CaE-Ca)-fv1*(Ca-CaE)*x110**fA)**fB-fv3*Ca**2/(Ca**2+fk3**2)-fv4*Ca**2/(Ca**2+fk4**2) +' + self.Ca_cyt_Flux + '*1e6' + ')/ftu)/(1+(fkBuff*fBuff)/((fkBuff + Ca)**2) + (fkBuff2*fBuff2)/((fkBuff2 + Ca)**2))'
+		self.Ca_Flux = '(((fv0*(CaE-Ca)-fv1*(Ca-CaE)*x110**fA)**fB-fv3*Ca**2/(Ca**2+fk3**2)-0*fv4*Ca**2/(Ca**2+fk4**2) +' + self.Ca_cyt_Flux + '*1e6' + ')/ftu)/(1+(fkBuff*fBuff)/((fkBuff + Ca)**2) + (fkBuff2*fBuff2)/((fkBuff2 + Ca)**2))'
 
 		self.x100_rate = '-fa2*Ca*x100-fa5*Ca*x100+fb5*x110'
 		self.x110_rate = '-fa2*Ca*x110+fa5*Ca*x100-fb5*x110+0.25*fb2*(IP3f(t))'
@@ -377,11 +377,11 @@ class DST_interface:
 		                'fb2': 0.6*1., #
 		                'fb5': 400.*0.08234, #
 		                'fv0': 0.001,
-		                'fv1': 0.5, #
-		                'fv3': 10.,
+		                'fv1': 0.65, # was 0.5
+		                'fv3': 1.8, # was 10
 		                'fv4': 27.,
 		                'ftu': 1.,
-		                'fk3': 0.26,
+		                'fk3': 0.12, # was 0.26
 		                'fk4': 1.1,
 		                'fA': 4.,
 		                'fB': 1.5,
@@ -750,6 +750,104 @@ class notstoch:
 			DST.DSargs.pars['HypoChN'] = HypoCh
 			ics = DST.IntegrateAppendFile(ics = ics, fName = 'temp.txt', t0 = t_step, t1 = t_step + self.dT)
 
+# For plotting a few things at once
+
+class comparative_plotter:
+	def __init__(self, iPlat, fName1, fName2, i_skip = 0):
+
+		self.tempts = []
+		self.fName = fName1
+		self.plat = iPlat
+		self.names = []
+		self.pts1 = {}
+		skip = i_skip
+		cur = 0
+		f = open(self.fName, 'r')
+		#reads a header and creates columns
+		subpts = f.readline()
+		while '\t' in subpts[cur:]:
+			dcur = subpts[cur:].find('\t') #how far is \t from current postion on the line
+			self.pts1[subpts[cur:cur+dcur]] = []
+			# self.names.append(subpts[cur:cur+dcur])
+			cur = cur + dcur + 1
+		cur = 0
+		width = len(self.pts1)
+		subpts = f.readline() #do-while is not supported sadge
+		#reads lines one by one and fills the lines of the array with info
+		while subpts != '':
+			for k in iter(self.pts1):
+				dcur = subpts[cur:].find('\t')
+				self.pts1[k].append(float(subpts[cur:cur+dcur]))
+				cur = cur + dcur + 1
+			cur = 0
+			if skip != 0: 
+				for i in range(skip-1): f.readline()
+			subpts = f.readline()
+		print('report file 1 read, generated temp array with  ' + str(len(self.pts1['t'])) + ' lines and ' + str(len(self.pts1)) + ' columns')
+		f.close()
+
+		self.tempts = []
+		self.fName = fName2
+		self.names = []
+		self.pts2 = {}
+		skip = i_skip
+		cur = 0
+		f = open(self.fName, 'r')
+		#reads a header and creates columns
+		subpts = f.readline()
+		while '\t' in subpts[cur:]:
+			dcur = subpts[cur:].find('\t') #how far is \t from current postion on the line
+			self.pts2[subpts[cur:cur+dcur]] = []
+			# self.names.append(subpts[cur:cur+dcur])
+			cur = cur + dcur + 1
+		cur = 0
+		width = len(self.pts2)
+		subpts = f.readline() #do-while is not supported sadge
+		#reads lines one by one and fills the lines of the array with info
+		while subpts != '':
+			for k in iter(self.pts2):
+				dcur = subpts[cur:].find('\t')
+				self.pts2[k].append(float(subpts[cur:cur+dcur]))
+				cur = cur + dcur + 1
+			cur = 0
+			if skip != 0: 
+				for i in range(skip-1): f.readline()
+			subpts = f.readline()
+		print('report file 2 read, generated temp array with  ' + str(len(self.pts2['t'])) + ' lines and ' + str(len(self.pts2)) + ' columns')
+		f.close()
+
+	def Plot_Em(self):
+		tempts1 = []
+		tempts2 = []
+
+		for k in range(0,len(self.pts1['t'])):
+			tempts1.append(self.plat.Give_Em(self.pts1['Na'][k], self.pts1['K'][k], self.pts1['Cl'][k], self.pts1['Ca_cyt'][k]))
+		
+		for k in range(0,len(self.pts2['t'])):
+			tempts2.append(self.plat.Give_Em(self.pts2['Na'][k], self.pts2['K'][k], self.pts2['Cl'][k], self.pts2['Ca_cyt'][k]))
+
+		plt.figure(1)
+		plt.plot(self.pts1['t'], tempts1, 'r', self.pts2['t'], tempts2, 'g')
+		plt.xlabel('time, s')                              # Axes labels
+		plt.ylabel('Em, V')                                 # Range of the y axis
+		plt.ylim(0.9*max(tempts1), 1.1*min(tempts1))
+		plt.title('Em over time')                             # Figure title from model name
+		plt.show()
+		del self.tempts[:]
+		self.tempts = []
+
+
+	def Plot_Ca(self):
+		plt.figure()
+		plt.plot(self.pts1['t'], self.pts1['Ca'], 'r', self.pts2['t'], self.pts2['Ca'], 'g')
+		plt.xlabel('time, s')                              				# Axes labels
+		plt.ylabel('Ca, $\mu$M')								# Range of the y axis
+		plt.ylim(0.95*min(self.pts1['Ca']), 1.05*max(self.pts1['Ca']))
+		plt.title('Ca concentration over time')			# Figure title from model name
+		plt.show()
+
+#For plotting th results of one integration
+
 class plotter:
 	def __init__(self, iPlat, fName, i_skip = 0):
 
@@ -811,9 +909,6 @@ class plotter:
 		self.tempts = []
 
 	def Plot_NaKCl(self):
-		# imx = InitIonMatrix()
-		# for l in range(0,len(self.pts[what])):
-		# 	self.pts[what][l] = self.pts[what][l] * 1e3
 		plt.figure()
 		plt.plot(self.pts['t'], self.pts['Na'], 'r', self.pts['t'], self.pts['K'], 'b', self.pts['t'], self.pts['Cl'], 'g')
 		plt.xlabel('time, s')                              				# Axes labels
@@ -854,6 +949,9 @@ class plotter:
 		axs.plot(self.pts['t'], tmppts['CaCur'], 'r', self.pts['t'], tmppts['NaCur'], 'g')
 		plt.title('NCX Fluxes')
 		plt.show()
+
+	def calc_Kd(self):
+		print(self.pts['Ca'][20] * self.pts['NCXM_Cin_E'][20] / self.pts['NCXM_Cin_Ca'][20])
 
 ### DEPRECATED ###
 ### MOVING TO ANOTHER CLASS ###
@@ -1147,6 +1245,8 @@ class plotncalc:
 	def give_time(self):
 		return self.pts['t']
 
+
+# this one is a hell incarnate
 class otherfunctions:
 	def __init__(self, mute = True):
 		if mute == False:

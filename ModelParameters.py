@@ -12,7 +12,7 @@ TheArray = [
 	[0.5, 0., 0.004, 0.2, 20., 0.21, 1.64, 2., 0.185, 0.1, 4.6, 1.7, 1, 0.11, 6., 0.45, 0.145, 2.],	#Fedor constants, 10
 	[0., 10, 0.05, 1],	#IP3 max, type of function, parametres of function, 11 <-------------------------------- IP3 HERE ---------------
 	[128e-15, 5e-15, 100e-12],	#other platelet constants: Cm, V, S, 12
-	[0.008, 3, 2],	#13 (atpase old) (left as a grim reminder of the cost of progress)
+	[0.005, 3, 2],	#13 (atpase old) (left as a grim reminder of the cost of progress)
 	[0.005], #parametres of NKCC: J0; 14
 	[0.005, 1e-4, 10],	#parametres of NCX: JMax, c1, c2; 15
 	[96485, 8.314, 310, 3600],	#world constants: F, R, T, speed (unit to hours); 16
@@ -57,5 +57,7 @@ def test_kinetics(the_dict, dict_names_forward, dict_names_backward):
 		k_b *= the_dict[name]
 
 	return (k_f/k_b)
+
+
 
 print(test_kinetics(TheDictionary['NCXM'],['a','c','g','x','f','k'],['b','d','j','y','e','h']))
