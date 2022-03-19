@@ -282,10 +282,10 @@ class DST_interface:
 		self.NCX_Model = {
 			'NCXM_Cin_E': '- NCXM_Cin_E * (NCXM_e * pow(Na * 1000, 3) + NCXM_f * Ca / 1000) + NCXM_x * NCXM_Cin_Na + NCXM_y * NCXM_Cin_Ca',
 			#'NCXM_Cout_E': '- NCXM_Cout_E * (NCXM_c * pow(Na_exf(t) * 1000, 3) + NCXM_d * Ca_exf(t) * 1000) + NCXM_b * NCXM_Cout_Na + NCXM_a * NCXM_Cout_Ca',
-			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g * NCXM_Cout_Na',
-			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h * NCXM_Cin_Na',
-			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j * NCXM_Cout_Ca',
-			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_Cin_Ca',
+			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h * exp((NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g * exp( - (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)* NCXM_Cout_Na',
+			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g * exp( - (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h * exp((NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Na',
+			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k * exp((NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j * exp( - (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cout_Ca',
+			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j * exp( - (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_k * exp((NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Ca ',
 		}
 		
 
@@ -438,7 +438,8 @@ class DST_interface:
 						'NCXM_g': self.plat.params['NCXM']['g'],
 						'NCXM_h': self.plat.params['NCXM']['h'],
 						'NCXM_j': self.plat.params['NCXM']['j'],
-						'NCXM_k': self.plat.params['NCXM']['k'],	
+						'NCXM_k': self.plat.params['NCXM']['k'],
+						'NCXM_Charge_Empty': -2.5,	
 
 						'P_Ca_c': self.plat.Pvar,
 						'P_Na_Ca': self.plat.PNaCavar, #self.imx.getparam[24][1],
@@ -629,7 +630,7 @@ class DST_interface:
 		PCargs.MaxStepSize  = 0.01
 		PCargs.MinStepSize  = 1e-3
 		PCargs.StepSize     = 3e-3
-		PCargs.VarTol = 1e-4
+		PCargs.VarTol  = 1e-4
 		PCargs.FuncTol = 1e-4
 		PCargs.TestTol = 1e-4
 		PCargs.SaveEigen    = True	#to tell unstable from stable branches
@@ -883,9 +884,6 @@ class plotter:
 
 		f.close()
 
-	def interactivePlotter():
-		colours = ['r', 'g', 'b']
-
 	def Plot_Concentrations(self, what):
 		plt.figure()
 		plt.plot(self.pts['t'], self.pts[what])
@@ -928,6 +926,23 @@ class plotter:
 		plt.ylim(0.95*min(tmppts), 1.05*max(tmppts))
 		plt.title('Ca concentration over time')			# Figure title from model name
 		plt.show()
+
+	def Plot_Concentrations_Change(self, what = 'Ca'):
+		tmpptst = []
+		for k in range(0,len(self.pts['t'])-1):
+			tmpptst.append(self.pts['t'][k])
+		for k in range(0,len(self.pts['t'])-1):
+			if (self.pts['t'][k+1] - self.pts['t'][k]) != 0:
+				self.tempts.append((self.pts[what][k+1] - self.pts[what][k])/(self.pts['t'][k+1] - self.pts['t'][k]))
+			else: self.tempts.append(self.tempts[k-1])
+		plt.figure(1)
+		plt.plot(tmpptst, self.tempts)
+		plt.xlabel('time, m')                              # Axes labels
+		plt.ylabel('flux, mol/s')                                 # Range of the y axis
+		plt.title('flux of ' + self.names[what])                             # Figure title from model name
+		plt.show()
+		del self.tempts[:]
+		self.tempts = []
 
 	def Plot_NCX_Species(self):
 		fig, axs = plt.subplots(ncols=1, nrows=2,constrained_layout=True, figsize=(5.5, 3.5))
