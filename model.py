@@ -114,6 +114,9 @@ class platelet_config:
 		self.Cl_TRPC = imx.getparam[29][2]
 		self.Ca_TRPC = imx.getparam[29][3]
 
+		self.NCXM_Volt_Dep = 0.001
+		self.NCXM_Empty_Charge = -2.5
+
 		# self.K_NCX = self.params['NCX'][0]
 
 		self.dPhiInit = -0.0
@@ -282,10 +285,10 @@ class DST_interface:
 		self.NCX_Model = {
 			'NCXM_Cin_E': '- NCXM_Cin_E * (NCXM_e * pow(Na * 1000, 3) + NCXM_f * Ca / 1000) + NCXM_x * NCXM_Cin_Na + NCXM_y * NCXM_Cin_Ca',
 			#'NCXM_Cout_E': '- NCXM_Cout_E * (NCXM_c * pow(Na_exf(t) * 1000, 3) + NCXM_d * Ca_exf(t) * 1000) + NCXM_b * NCXM_Cout_Na + NCXM_a * NCXM_Cout_Ca',
-			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h * exp((NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g * exp( - (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)* NCXM_Cout_Na',
-			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g * exp( - (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h * exp((NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Na',
-			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k * exp((NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j * exp( - (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cout_Ca',
-			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j * exp( - (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_k * exp((NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Ca ',
+			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)* NCXM_Cout_Na',
+			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Na',
+			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cout_Ca',
+			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Ca ',
 		}
 		
 
@@ -431,15 +434,16 @@ class DST_interface:
 						'NCXM_y': self.plat.params['NCXM']['y'],
 						'NCXM_Speed_Mod': self.plat.params['NCXM']['Speed_Mod'] / T,
 
+						'NCXM_Charge_Empty': self.plat.NCXM_Empty_Charge,
+						'NCXM_Volt_Dependancy': self.plat.NCXM_Volt_Dep,	
 						'NCXM_a': self.plat.params['NCXM']['a'],
 						'NCXM_b': self.plat.params['NCXM']['b'],
 						'NCXM_c': self.plat.params['NCXM']['c'],
 						'NCXM_d': self.plat.params['NCXM']['d'],
-						'NCXM_g': self.plat.params['NCXM']['g'],
-						'NCXM_h': self.plat.params['NCXM']['h'],
-						'NCXM_j': self.plat.params['NCXM']['j'],
-						'NCXM_k': self.plat.params['NCXM']['k'],
-						'NCXM_Charge_Empty': -2.5,	
+						'NCXM_g': self.plat.params['NCXM']['g'] / m.exp(-self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 3.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
+						'NCXM_h': self.plat.params['NCXM']['h'] / m.exp(self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 3.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
+						'NCXM_j': self.plat.params['NCXM']['j'] / m.exp(-self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 2.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
+						'NCXM_k': self.plat.params['NCXM']['k'] / m.exp(self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 2.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
 
 						'P_Ca_c': self.plat.Pvar,
 						'P_Na_Ca': self.plat.PNaCavar, #self.imx.getparam[24][1],
@@ -961,7 +965,7 @@ class plotter:
 		for k in range(0,len(self.pts['t'])):
 			tmppts['NaCur'].append(self.plat.params['NCXM']['Speed_Mod'] * (self.pts['NCXM_Cin_Na'][k] * self.plat.params['NCXM']['x'] - self.plat.params['NCXM']['e'] * self.pts['NCXM_Cin_E'][k] * pow(self.pts['Na'][k] * 1e3, 3)))
 			tmppts['CaCur'].append(self.plat.params['NCXM']['Speed_Mod'] * (self.pts['NCXM_Cin_Ca'][k] * self.plat.params['NCXM']['y'] - self.plat.params['NCXM']['f'] * self.pts['NCXM_Cin_E'][k] * self.pts['Ca'][k] * 1e-3))
-		axs.plot(self.pts['t'], tmppts['CaCur'], 'r', self.pts['t'], tmppts['NaCur'], 'g')
+		axs.plot(self.pts['t'], tmppts['CaCur'], 'g', self.pts['t'], tmppts['NaCur'], 'r')
 		plt.title('NCX Fluxes')
 		plt.show()
 
