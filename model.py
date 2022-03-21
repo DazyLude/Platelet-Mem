@@ -282,13 +282,18 @@ class DST_interface:
 			')'
 		self.PipettePotential = '0*(' + self.PipetteCurrent + ')/Vol'
 		
-		self.NCX_Model = {
+		NCX_Model = {
 			'NCXM_Cin_E': '- NCXM_Cin_E * (NCXM_e * pow(Na * 1000, 3) + NCXM_f * Ca / 1000) + NCXM_x * NCXM_Cin_Na + NCXM_y * NCXM_Cin_Ca',
 			#'NCXM_Cout_E': '- NCXM_Cout_E * (NCXM_c * pow(Na_exf(t) * 1000, 3) + NCXM_d * Ca_exf(t) * 1000) + NCXM_b * NCXM_Cout_Na + NCXM_a * NCXM_Cout_Ca',
-			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)* NCXM_Cout_Na',
-			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Na',
-			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cout_Ca',
-			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T)) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*Em(Na, K, Cl, Ca, t, dPhi)/R/T) * NCXM_Cin_Ca ',
+			'NCXM_Cin_Na': '- NCXM_Cin_Na * (NCXM_x + NCXM_h_f(Na, K, Cl, Ca, t, dPhi)) + NCXM_e * NCXM_Cin_E * pow(Na * 1000, 3) + NCXM_g_f(Na, K, Cl, Ca, t, dPhi) * NCXM_Cout_Na',
+			'NCXM_Cout_Na': '- NCXM_Cout_Na * (NCXM_b + NCXM_g_f(Na, K, Cl, Ca, t, dPhi)) + NCXM_c * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * pow(Na_exf(t) * 1000, 3) + NCXM_h_f(Na, K, Cl, Ca, t, dPhi) * NCXM_Cin_Na',
+			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k_f(Na, K, Cl, Ca, t, dPhi)) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j_f(Na, K, Cl, Ca, t, dPhi) * NCXM_Cout_Ca',
+			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j_f(Na, K, Cl, Ca, t, dPhi)) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_k_f(Na, K, Cl, Ca, t, dPhi) * NCXM_Cin_Ca',
+
+			'NCXM_h_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Na_exf(t), Na))/R/T)'),
+			'NCXM_g_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Na_exf(t), Na))/R/T)'),
+			'NCXM_k_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(K_exf(t), K))/R/T)'),
+			'NCXM_j_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - - Nernst(K_exf(t), K))/R/T)'),
 		}
 		
 
@@ -300,17 +305,17 @@ class DST_interface:
 		v5 = 'K_E * ATP * f5 - K_E_ATP * b5'
 		v6 = 'K_E_ATP * f6 - E_ATP * pow(K, 2) * b6'
 
-		self.k1 = 'f6'
-		self.k2 = 'f1 * pow(Na, 3)'
-		self.k3 = 'f2'
-		self.k4 = 'f3 * exp(F * Em(Na, K, Cl, Ca_cyt, t, dPhi)/(2 * R * T))'
+		k1 = 'f6'
+		k2 = 'f1 * pow(Na, 3)'
+		k3 = 'f2'
+		k4 = 'f3 * exp(F * Em(Na, K, Cl, Ca_cyt, t, dPhi)/(2 * R * T))'
 		
-		self.a1 = 'b6 * pow(K, 2)'
-		self.a2 = '(b1 + f2)'
-		self.a3 = 'b2 * ADP'
-		self.a4 = '(b3 * pow(Na_exf(t), 3) * exp(-1 * F * Em(Na, K, Cl, Ca_cyt, t, dPhi)/(2 * R * T)) + f4 * pow(K_exf(t), 2))'
+		a1 = 'b6 * pow(K, 2)'
+		a2 = '(b1 + f2)'
+		a3 = 'b2 * ADP'
+		a4 = '(b3 * pow(Na_exf(t), 3) * exp(-1 * F * Em(Na, K, Cl, Ca_cyt, t, dPhi)/(2 * R * T)) + f4 * pow(K_exf(t), 2))'
 
-		self.bracket = self.k1 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.k3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.a3 + '*' + self.k4 + '+' + self.a1 + '*' + self.a2 + '*' + self.a3 + '*' + self.a4
+		bracket = k1 + '*' + k2 + '*' + k3 + '*' + k4 + '+' + a1 + '*' + k2 + '*' + k3 + '*' + k4 + '+' + a1 + '*' + a2 + '*' + k3 + '*' + k4 + '+' + a1 + '*' + a2 + '*' + a3 + '*' + k4 + '+' + a1 + '*' + a2 + '*' + a3 + '*' + a4
 		#initializing PyDSTool object with given parametres of a platelet class
 
 		self.pts = None
@@ -440,10 +445,10 @@ class DST_interface:
 						'NCXM_b': self.plat.params['NCXM']['b'],
 						'NCXM_c': self.plat.params['NCXM']['c'],
 						'NCXM_d': self.plat.params['NCXM']['d'],
-						'NCXM_g': self.plat.params['NCXM']['g'] / m.exp(-self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 3.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
-						'NCXM_h': self.plat.params['NCXM']['h'] / m.exp(self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 3.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
-						'NCXM_j': self.plat.params['NCXM']['j'] / m.exp(-self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 2.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
-						'NCXM_k': self.plat.params['NCXM']['k'] / m.exp(self.plat.NCXM_Volt_Dep * (self.plat.NCXM_Empty_Charge + 2.)*self.plat.F*self.plat.Em_rest/self.plat.R/self.plat.T),
+						'NCXM_g': self.plat.params['NCXM']['g'],
+						'NCXM_h': self.plat.params['NCXM']['h'],
+						'NCXM_j': self.plat.params['NCXM']['j'],
+						'NCXM_k': self.plat.params['NCXM']['k'],
 
 						'P_Ca_c': self.plat.Pvar,
 						'P_Na_Ca': self.plat.PNaCavar, #self.imx.getparam[24][1],
@@ -461,7 +466,7 @@ class DST_interface:
 						'J' : (['z_i', 'In', 'Ex', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], '2. * r(z_i, Na, K, Cl, Ca, t, dPhi) / (exp(r(z_i, Na, K, Cl, Ca, t, dPhi)) - exp(-r(z_i, Na, K, Cl, Ca, t, dPhi))) * (Ex * exp(-r(z_i, Na, K, Cl, Ca, t, dPhi)) - In * exp(r(z_i, Na, K, Cl, Ca, t, dPhi)))'),
 						'JPip' : (['z_i', 'In', 'Ex', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], '2. * rPip(z_i, Na, K, Cl, Ca, t, dPhi) / (exp(rPip(z_i, Na, K, Cl, Ca, t, dPhi)) - exp(-rPip(z_i, Na, K, Cl, Ca, t, dPhi))) * (Ex * exp(-rPip(z_i, Na, K, Cl, Ca, t, dPhi)) - In * exp(rPip(z_i, Na, K, Cl, Ca, t, dPhi)))'),
 
-						'U_atp': (['t', 'Na', 'K', 'Cl', 'Ca_cyt', 'dPhi'], 'J0_atp * f2 * ' + self.k1 + '*' + self.k1 + '*' + self.k2 + '*' + self.k2 + '*' + self.k3 + '*' + self.k4 + '/(' + self.a1 + '*' + self.a2 + '*' + self.bracket + ') / RestAtpaseRate'),
+						'U_atp': (['t', 'Na', 'K', 'Cl', 'Ca_cyt', 'dPhi'], 'J0_atp * f2 * ' + k1 + '*' + k1 + '*' + k2 + '*' + k2 + '*' + k3 + '*' + k4 + '/(' + a1 + '*' + a2 + '*' + bracket + ') / RestAtpaseRate'),
 
 						'U_NaK2Cl': (['Na', 'K', 'Cl', 't'], 'U0_NaK2Cl * (K_exf(t) * Na_exf(t) * pow(Cl_exf(t), 2) - K * Na * pow(Cl, 2))'),
 
@@ -470,11 +475,17 @@ class DST_interface:
 						'P_TRPC': (['t'], 'P_TRPC_0 * pow(IP3f(t) * 1e-6, n_TRPC)/(pow(K05_TRPC, n_TRPC) + pow(IP3f(t) * 1e-6, n_TRPC))'),
 
 						'NCXM_Cout_E': (['NCXM_Cin_E', 'NCXM_Cin_Na', 'NCXM_Cout_Na', 'NCXM_Cin_Ca', 'NCXM_Cout_Ca'], '1 - NCXM_Cin_E - NCXM_Cin_Na - NCXM_Cout_Na - NCXM_Cin_Ca - NCXM_Cout_Ca'),
+						'NCXM_h_f': NCX_Model['NCXM_h_f'],
+						'NCXM_g_f': NCX_Model['NCXM_g_f'],
+						'NCXM_j_f': NCX_Model['NCXM_j_f'],
+						'NCXM_k_f': NCX_Model['NCXM_k_f'],
+
 						'J_NCX_Na': (['Na', 'NCXM_Cin_Na', 'NCXM_Cin_E'], 'NCXM_Speed_Mod * (NCXM_Cin_Na * NCXM_x - NCXM_e * NCXM_Cin_E * pow(Na * 1e3, 3))'),
 						'J_NCX_Ca': (['Ca', 'NCXM_Cin_Ca', 'NCXM_Cin_E'], 'NCXM_Speed_Mod * (NCXM_Cin_Ca * NCXM_y - NCXM_f * NCXM_Cin_E * Ca * 1e-3)'),
 
 						'r': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], 'z_i * Em(Na, K, Cl, Ca, t, dPhi) * F / R / T / 2.'),
 						'rPip': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], 'z_i * (Em(Na, K, Cl, Ca, t, dPhi) + dPhi) * F / R / T / 2.'),
+						'Nernst': (['C_out', 'C_in'], 'R * T / z / F * ln(C_out/C_in)'),
 
 						'Em': (['Na', 'K', 'Cl', 'Ca_cyt', 't', 'dPhi'], 'F / Cm * (K + Na + 2*(Ca_cyt) - Cl - z0 * W0(t)) - 0*Spip/Smem*dPhi'),
 
@@ -514,12 +525,12 @@ class DST_interface:
 							'PipetteCurrent': self.PipetteCurrent,
 							'dPhi': self.PipettePotential,
 
-							'NCXM_Cin_E': self.NCX_Model['NCXM_Cin_E'],
-							'NCXM_Cin_Na': self.NCX_Model['NCXM_Cin_Na'],
-							'NCXM_Cin_Ca': self.NCX_Model['NCXM_Cin_Ca'],
+							'NCXM_Cin_E': NCX_Model['NCXM_Cin_E'],
+							'NCXM_Cin_Na': NCX_Model['NCXM_Cin_Na'],
+							'NCXM_Cin_Ca': NCX_Model['NCXM_Cin_Ca'],
 							# 'NCXM_Cout_E': self.NCX_Model['NCXM_Cout_E'],
-							'NCXM_Cout_Na': self.NCX_Model['NCXM_Cout_Na'],
-							'NCXM_Cout_Ca': self.NCX_Model['NCXM_Cout_Ca'],
+							'NCXM_Cout_Na': NCX_Model['NCXM_Cout_Na'],
+							'NCXM_Cout_Ca': NCX_Model['NCXM_Cout_Ca'],
 							}
 		#initial condition	
 		self.DSargs.ics = {'Na': self.plat.Na_in, 'K': self.plat.K_in, 'Cl': self.plat.Cl_in, 'Ca_cyt': self.plat.Ca_cyt_in, 
