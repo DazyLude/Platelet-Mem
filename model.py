@@ -114,7 +114,7 @@ class platelet_config:
 		self.Cl_TRPC = imx.getparam[29][2]
 		self.Ca_TRPC = imx.getparam[29][3]
 
-		self.NCXM_Volt_Dep = 0.001
+		self.NCXM_Volt_Dep = 0.01
 		self.NCXM_Empty_Charge = -2.5
 
 		# self.K_NCX = self.params['NCX'][0]
@@ -290,10 +290,10 @@ class DST_interface:
 			'NCXM_Cin_Ca': '- NCXM_Cin_Ca * (NCXM_y + NCXM_k_f(Na, K, Cl, Ca, t, dPhi)) + NCXM_f * NCXM_Cin_E * Ca / 1000 + NCXM_j_f(Na, K, Cl, Ca, t, dPhi) * NCXM_Cout_Ca',
 			'NCXM_Cout_Ca': ' - NCXM_Cout_Ca * (NCXM_a + NCXM_j_f(Na, K, Cl, Ca, t, dPhi)) + NCXM_d * NCXM_Cout_E(NCXM_Cin_E, NCXM_Cin_Na, NCXM_Cout_Na, NCXM_Cin_Ca, NCXM_Cout_Ca) * Ca_exf(t) * 1000 + NCXM_k_f(Na, K, Cl, Ca, t, dPhi) * NCXM_Cin_Ca',
 
-			'NCXM_h_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Na_exf(t), Na))/R/T)'),
-			'NCXM_g_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Na_exf(t), Na))/R/T)'),
-			'NCXM_k_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(K_exf(t), K))/R/T)'),
-			'NCXM_j_f': (['Na, K, Cl, Ca, t, dPhi'],'NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - - Nernst(K_exf(t), K))/R/T)'),
+			'NCXM_h_f': (['Na', 'K', 'Cl', 'Ca', 't', 'dPhi'],'NCXM_h * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Na_exf(t), Na, 1))/R/T)'),
+			'NCXM_g_f': (['Na', 'K', 'Cl', 'Ca', 't', 'dPhi'],'NCXM_g * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 3.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Na_exf(t), Na, 1))/R/T)'),
+			'NCXM_k_f': (['Na', 'K', 'Cl', 'Ca', 't', 'dPhi'],'NCXM_k * exp(NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - Nernst(Ca_exf(t), Ca, 2))/R/T)'),
+			'NCXM_j_f': (['Na', 'K', 'Cl', 'Ca', 't', 'dPhi'],'NCXM_j * exp( - NCXM_Volt_Dependancy * (NCXM_Charge_Empty + 2.)*F*(Em(Na, K, Cl, Ca, t, dPhi) - - Nernst(Ca_exf(t), Ca, 2))/R/T)'),
 		}
 		
 
@@ -485,7 +485,7 @@ class DST_interface:
 
 						'r': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], 'z_i * Em(Na, K, Cl, Ca, t, dPhi) * F / R / T / 2.'),
 						'rPip': (['z_i', 'Na', 'K', 'Cl', 'Ca', 't', 'dPhi'], 'z_i * (Em(Na, K, Cl, Ca, t, dPhi) + dPhi) * F / R / T / 2.'),
-						'Nernst': (['C_out', 'C_in'], 'R * T / z / F * ln(C_out/C_in)'),
+						'Nernst': (['C_out', 'C_in', 'z'], 'R * T / z / F * log(C_out/C_in)'),
 
 						'Em': (['Na', 'K', 'Cl', 'Ca_cyt', 't', 'dPhi'], 'F / Cm * (K + Na + 2*(Ca_cyt) - Cl - z0 * W0(t)) - 0*Spip/Smem*dPhi'),
 
